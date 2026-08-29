@@ -1,0 +1,255 @@
+/**
+ * State aplikasi + pipeline turunan: filter -> sort -> paginate.
+ * Baris tabel adalah TIM. Komponen tidak menyaring sendiri; mereka membaca
+ * hasil derive().
+ */
+import { createStore } from '../core/store.js';
+import { compare, normalize } from '../core/format.js';
+import { summarize } from './source.js';
+
+export const COLUMNS = [
+  { key: 'index', label: '#', sortable: false, align: 'right', width: '52px' },
+  { key: 'team_name', label: 'Tim', sortable: true, width: 'minmax(220px, 1.3fr)' },
+  { key: 'kontingen', label: 'Kontingen', sortable: true, width: 'minmax(200px, 1.2fr)' },
+  { key: 'unit_kerja', label: 'Unit Kerja', sortable: true, width: 'minmax(180px, 1fr)' },
+  { key: 'pic_name', label: 'PIC / Manager', sortable: true, width: 'minmax(160px, 1fr)' },
+  { key: 'member_count', label: 'Pemain', sortable: true, align: 'right', width: '90px' },
+  { key: 'submission_date', label: 'Didaftarkan', sortable: true, width: '130px' },
+];
+
+/* Ukuran halaman dikunci di 7 baris — tidak ada pemilih jumlah baris lagi. */
+export const PAGE_SIZE = 7;
+
+/* Cabor selalu terpilih — tidak ada opsi "semua". Nilai awalnya kosong sampai
+   dataset dimuat, lalu diisi cabor pertama. */
+const DEFAULT_FILTERS = {
+  q: '',
+  game: '',
+  kontingen: '',
+};
+
+export const store = createStore({
+  phase: 'loading', // loading | ready | error
+  error: '',
+  meta: null,
+  facets: { games: [], kontingen: [] },
+  teams: [],
+  players: [],
+  filters: { ...DEFAULT_FILTERS },
+  // Urutan awal menurut kontingen: verifikasi dikerjakan per kontingen, jadi
+  // tim satu kontingen harus berdampingan tanpa perlu mengurutkan manual.
+  sort: { key: 'kontingen', dir: 'asc' },
+  page: 1,
+  pageSize: PAGE_SIZE,
+  selectedTeamId: null,
+  selectedFocus: null, // null | 'berkas' | 'foto' — layar yang dituju saat tim dibuka
+  // Halaman khusus admin: daftar seluruh Kode Tim pada cabor terpilih.
+  showCodes: false,
+  // Cerminan sesi dari data/auth.js, supaya komponen cukup berlangganan store.
+  // Ini hanya untuk TAMPILAN — wewenang sesungguhnya ditegakkan GAS.
+  auth: null, // null | { nama, peran }
+});
+
+/* ----------------------------- aksi ----------------------------------- */
+
+/**
+ * Cabor sengaja TIDAK dipilih otomatis: selama `filters.game` kosong, aplikasi
+ * menampilkan layar pilihan cabor (<sport-gate>) lebih dulu.
+ */
+export function setDataset(dataset) {
+  store.set({
+    phase: 'ready',
+    meta: dataset.meta,
+    facets: dataset.facets,
+    teams: dataset.teams,
+    players: dataset.players,
+    page: 1,
+  });
+}
+
+export function setError(message) {
+  store.set({ phase: 'error', error: message });
+}
+
+/** Setiap perubahan filter mengembalikan pagination ke halaman 1. */
+export function setFilter(patch) {
+  store.set((state) => ({ filters: { ...state.filters, ...patch }, page: 1 }));
+}
+
+/** Cabor yang sedang dipilih dipertahankan — ia navigasi, bukan filter. */
+export function resetFilters() {
+  store.set((state) => ({ filters: { ...DEFAULT_FILTERS, game: state.filters.game }, page: 1 }));
+}
+
+/** Kembali ke layar pilihan cabor; seluruh filter ikut dibersihkan. */
+export function clearGame() {
+  store.set({
+    filters: { ...DEFAULT_FILTERS }, page: 1,
+    selectedTeamId: null, selectedFocus: null, showCodes: false,
+  });
+}
+
+/** Klik header: kolom sama -> balik arah, kolom lain -> mulai dari menaik. */
+export function setSort(key) {
+  store.set((state) => {
+    const dir = state.sort.key === key && state.sort.dir === 'asc' ? 'desc' : 'asc';
+    return { sort: { key, dir }, page: 1 };
+  });
+}
+
+/** Dipakai pemilih urutan di ponsel: ganti kolom, arah dipertahankan. */
+export function setSortKey(key) {
+  store.set((state) => ({ sort: { key, dir: state.sort.dir }, page: 1 }));
+}
+
+export function toggleSortDir() {
+  store.set((state) => ({ sort: { key: state.sort.key, dir: state.sort.dir === 'asc' ? 'desc' : 'asc' }, page: 1 }));
+}
+
+export function setPage(page) {
+  store.set({ page });
+}
+
+
+/**
+ * Perbarui satu tim setelah unggahan berhasil, tanpa memuat ulang seluruh data.
+ * Array `teams` diganti barunya (bukan dimutasi) supaya store mendeteksi
+ * perubahan — pembanding store bersifat dangkal.
+ */
+export function applyUpload(teamId, patch) {
+  store.set((state) => ({
+    teams: state.teams.map((team) => (team.team_id === teamId ? { ...team, ...patch } : team)),
+  }));
+}
+
+/** Apakah roster cabor yang sedang dibuka sudah dikunci panitia. */
+export function caborTerkunci(state = store.state) {
+  const game = state.filters.game;
+  return Boolean(game && state.meta?.terkunci?.[game]);
+}
+
+/** Perbarui status kunci setelah admin mengubahnya, tanpa memuat ulang data. */
+export function setTerkunci(terkunci) {
+  store.set((state) => ({ meta: { ...state.meta, terkunci: terkunci || {} } }));
+}
+
+export function setAuth(sesi) {
+  store.set({ auth: sesi ? { nama: sesi.nama, peran: sesi.peran } : null });
+}
+
+/**
+ * Terapkan perubahan satu PEMAIN ke store, tanpa memuat ulang seluruh data.
+ * Dipakai setelah unggah ID card per orang dan setelah admin menyunting.
+ *
+ * Array teams dan members diganti barunya (bukan dimutasi) karena pembanding
+ * store bersifat dangkal — mutasi di tempat tidak akan terdeteksi.
+ */
+export function applyPlayerPatch(playerId, patch) {
+  if (!playerId) return;
+  store.set((state) => ({
+    teams: state.teams.map((team) => {
+      if (!team.members.some((m) => m.player_id === playerId)) return team;
+      const members = team.members.map((m) => (m.player_id === playerId ? { ...m, ...patch } : m));
+      return { ...team, members, idcard_count: members.filter((m) => m.has_idcard).length };
+    }),
+  }));
+}
+
+/**
+ * Ganti seluruh roster satu tim. Dipakai setelah admin menyimpan: pemain bisa
+ * bertambah, berkurang, atau berubah urutan, sehingga menambal per pemain
+ * (applyPlayerPatch) tidak cukup.
+ */
+export function gantiRoster(teamId, members) {
+  store.set((state) => ({
+    teams: state.teams.map((team) =>
+      team.team_id === teamId
+        ? {
+            ...team,
+            members,
+            member_count: members.length,
+            idcard_count: members.filter((m) => m.has_idcard).length,
+          }
+        : team
+    ),
+  }));
+}
+
+/**
+ * Buka panel detail satu tim.
+ *
+ * `focus` menentukan layar mana yang dibuka: 'berkas' (logo & ID card), 'foto'
+ * (foto bersama & foto pemain), atau null untuk layar verifikasi. Dipakai menu
+ * baris supaya tiap pilihan mendarat tepat di tempatnya.
+ */
+export function selectTeam(teamId, focus = null) {
+  store.set({ selectedTeamId: teamId, selectedFocus: teamId ? focus : null, showCodes: false });
+}
+
+/** Buka/tutup halaman daftar kode tim. Saling meniadakan dengan halaman tim. */
+export function setShowCodes(tampil) {
+  store.set({ showCodes: Boolean(tampil), selectedTeamId: null, selectedFocus: null });
+}
+
+export function activeFilterCount(filters = store.state.filters) {
+  return (filters.q ? 1 : 0) + (filters.kontingen ? 1 : 0);
+}
+
+/* --------------------------- turunan ---------------------------------- */
+
+/** Filter murni atas daftar tim; murah untuk 63 baris. */
+export function filterTeams(state = store.state) {
+  const { q, game, kontingen } = state.filters;
+  const needle = normalize(q.trim());
+
+  return state.teams.filter((team) => {
+    if (game && team.game !== game) return false;
+    if (kontingen && team.kontingen !== kontingen) return false;
+    if (needle && !team._haystack.includes(needle)) return false;
+    return true;
+  });
+}
+
+export function sortTeams(rows, sort = store.state.sort) {
+  const { key, dir } = sort;
+  const factor = dir === 'desc' ? -1 : 1;
+  // Sort stabil: indeks asli sebagai tie-breaker.
+  return rows
+    .map((row, i) => [row, i])
+    .sort((a, b) => {
+      const result = compare(a[0][key], b[0][key]);
+      return result !== 0 ? result * factor : a[1] - b[1];
+    })
+    .map(([row]) => row);
+}
+
+/**
+ * Anggota tim yang cocok dengan kata kunci — dipakai tabel untuk menunjukkan
+ * "kenapa tim ini muncul" saat pengguna mencari nama pemain.
+ */
+export function matchedMembers(team, query) {
+  const needle = normalize((query || '').trim());
+  if (!needle || team._teamText.includes(needle)) return [];
+  return team.members.filter((member) => member._haystack.includes(needle));
+}
+
+/** Satu panggilan menghasilkan semua yang dibutuhkan tabel + statistik. */
+export function derive(state = store.state) {
+  const filtered = sortTeams(filterTeams(state), state.sort);
+  const size = state.pageSize || PAGE_SIZE;
+  const pageCount = Math.max(1, Math.ceil(filtered.length / size));
+  const page = Math.min(state.page, pageCount);
+  const start = (page - 1) * size;
+
+  return {
+    filtered,
+    rows: filtered.slice(start, start + size),
+    offset: start,
+    page,
+    pageCount,
+    stats: summarize(filtered),
+    // Pembanding "dari total" dihitung dalam cabor yang sedang dibuka,
+    // bukan seluruh dataset — cabor lain bukan konteks yang relevan.
+    totalTeams: state.teams.filter((team) => !state.filters.game || team.game === state.filters.game).length,
+  };
+}

@@ -1,0 +1,106 @@
+/* Design token MAF 2026 — SATU tema, diambil langsung dari palet logo.
+   Sampel warna dominan dari assets/:
+     biru royal  #0030D8 · #0060D8 · #0078F0   (nyala api & hexagon cabor)
+     emas        #F0C000 · #FFC400             (angka "2026" & aksen)
+     oranye      #F09000 · #FF8A00             (lidah api)
+     putih       #F0F0F0                       (huruf MAF & outline ilustrasi)
+   Kanvasnya navy kebiruan yang DIREDAM saturasinya: biru royal logo (S ~66%)
+   terlalu menusuk mata kalau dipakai untuk bidang besar, jadi permukaan turun ke
+   S ~40-47% sementara aksen (emas, oranye, biru cabor) tetap penuh. Emas dipakai
+   sebagai warna aksi. Tidak ada mode terang/gelap.
+
+   Token didefinisikan di :root sehingga terwarisi ke dalam Shadow DOM setiap
+   komponen — komponen tidak pernah menulis nilai warna mentah. */
+
+:root {
+  color-scheme: dark;
+
+  /* --- Brand mentah (persis dari logo) --- */
+  --brand-blue: #0030d8;
+  --brand-blue-bright: #0078f0;
+  --brand-navy: #071a4d;
+  --brand-gold: #ffc400;
+  --brand-orange: #ff8a00;
+
+  /* Warna per cabor — dinaikkan kecerahannya agar tetap terbaca di atas
+     kanvas biru (biru asli logo terlalu dekat dengan latar). */
+  --game-mlbb: #55a8ff;
+  /* Merah-oranye untuk tim yang belum memenuhi syarat. Sengaja BUKAN oranye
+     PUBG maupun emas aksi: keduanya sudah punya arti lain di tabel (kontingen
+     dan aksi), dan meminjamnya akan membuat penanda ini terbaca sebagai
+     dekorasi, bukan peringatan. */
+  --peringatan: #ff7d6b;
+
+  --game-pubg: #ffa428;
+
+  /* --- Kanvas & permukaan --- */
+  --bg: #141c38;
+  --bg-glow-1: rgba(0, 110, 235, 0.16);
+  --bg-glow-2: rgba(255, 138, 0, 0.1);
+
+  --surface: #1b2444;
+  --surface-2: #222c53;
+  --surface-3: #2b3766;
+  --surface-inset: rgba(255, 255, 255, 0.07);
+
+  --border: rgba(150, 175, 235, 0.2);
+  --border-strong: rgba(175, 200, 245, 0.38);
+
+  --text: #edf1fa;
+  --text-muted: #b9c4de;
+  --text-faint: #8f9cbd;
+
+  /* Aksi memakai emas — warna "MAF 2026" di logo, dan satu-satunya warna yang
+     benar-benar menonjol di atas kanvas biru. */
+  --accent: var(--brand-gold);
+  --accent-contrast: #10224f;
+  --accent-soft: rgba(255, 196, 0, 0.18);
+  --accent-ring: rgba(255, 196, 0, 0.5);
+
+  --gold: var(--brand-gold);
+  --gold-soft: rgba(255, 196, 0, 0.24);
+
+  --header-bg: rgba(20, 28, 56, 0.88);
+  --row-hover: rgba(255, 196, 0, 0.07);
+  --row-stripe: rgba(255, 255, 255, 0.035);
+
+  --shadow-sm: 0 1px 2px rgba(3, 10, 32, 0.45);
+  --shadow-md: 0 10px 30px rgba(3, 10, 32, 0.4);
+  --shadow-lg: 0 28px 80px rgba(3, 10, 32, 0.6);
+
+  --logo-maf: url('../assets/web/maf-tagline-white.png');
+  --skeleton: linear-gradient(90deg, rgba(255, 255, 255, 0.06) 25%, rgba(255, 255, 255, 0.14) 37%, rgba(255, 255, 255, 0.06) 63%);
+
+  /* --- Radius & elevasi --- */
+  --r-xs: 6px;
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 20px;
+  --r-pill: 999px;
+
+  /* --- Spasi --- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+
+  /* --- Tipografi --- */
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  --fs-xs: 11px;
+  --fs-sm: 12.5px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+  --fs-2xl: 28px;
+  --fs-3xl: 38px;
+
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --dur: 180ms;
+
+  --header-h: 68px;
+  --maxw: 1560px;
+}
