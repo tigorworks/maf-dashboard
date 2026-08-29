@@ -7,9 +7,9 @@
  */
 import { BaseElement, define } from '../core/element.js';
 import { css } from '../core/css.js';
-import { esc, formatDate, highlight, hueOf, initials, num } from '../core/format.js';
+import { esc, formatDate, highlight, hueOf, initials, jamMenit, num, sisaWaktu } from '../core/format.js';
 import { buangTim, COLUMNS, matchedMembers, selectTeam, setSort, store } from '../data/app-state.js';
-import { adalahAdmin, hapusTim } from '../data/auth.js';
+import { adalahAdmin, buatKodeTim, hapusTim } from '../data/auth.js';
 import { periksaTim } from '../data/rules.js';
 import '../ui/ui-pagination.js';
 
@@ -316,6 +316,14 @@ const styles = css`
     position: fixed;
     z-index: 40;
     min-width: 190px;
+    /* Menunya tumbuh seiring peran: admin kini melihat lima butir. Di ponsel
+       lanskap — atau layar pendek mana pun — daftar itu bisa lebih tinggi
+       daripada ruang yang tersisa, dan penempatannya hanya bisa membalik ke
+       atas, tidak bisa memendekkan diri. Batas ini yang membuat butir terakhir
+       tetap terjangkau. */
+    max-height: calc(100vh - 16px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
     padding: var(--sp-1);
     background: var(--surface-2);
     border: 1px solid var(--border-strong);
@@ -383,11 +391,11 @@ const styles = css`
     border-top: 1px solid var(--border);
   }
 
-  /* --- Konfirmasi hapus tim ---
-     Lapisan penuh, bukan sekadar baris di dalam menu: menghapus tim membuang
-     rosternya sekaligus seluruh berkas yang sudah dikumpulkan, dan tidak ada
-     layar mana pun yang bisa mengembalikannya. */
-  .hapus-lapis {
+  /* --- Lapisan dialog (hapus tim & kode tim) ---
+     Lapisan penuh, bukan baris di dalam menu: menu ⋮ ditutup begitu jari
+     terangkat, sedangkan keduanya perlu dibaca dulu — yang satu menghapus
+     rosters beserta berkasnya, yang satu menampilkan kredensial untuk dicatat. */
+  .lapis {
     position: fixed;
     inset: 0;
     z-index: 60;
@@ -397,44 +405,41 @@ const styles = css`
     background: rgba(4, 8, 20, 0.72);
     backdrop-filter: blur(3px);
   }
-  .hapus-kotak {
+  .kotak {
     width: min(440px, 100%);
     padding: var(--sp-5);
     background: var(--surface);
-    border: 1px solid var(--peringatan);
+    border: 1px solid var(--border-strong, var(--border));
     border-radius: var(--r-md);
   }
-  .hapus-kotak h3 {
-    margin: 0 0 var(--sp-2);
-    font-size: var(--fs-lg);
+  .kotak.bahaya {
+    border-color: var(--peringatan);
+  }
+  .kotak h3 {
+    color: var(--text);
+  }
+  .kotak.bahaya h3 {
     color: var(--peringatan);
   }
-  .hapus-kotak p {
+  .kotak h3 {
+    margin: 0 0 var(--sp-2);
+    font-size: var(--fs-lg);
+  }
+  .kotak p {
     margin: 0 0 var(--sp-3);
     font-size: var(--fs-sm);
     line-height: 1.5;
     color: var(--text-muted);
   }
-  .hapus-kotak b {
+  .kotak b {
     color: var(--text);
   }
-  .hapus-kotak input {
-    width: 100%;
-    height: 42px;
-    margin-bottom: var(--sp-3);
-    padding: 0 var(--sp-3);
-    font: inherit;
-    color: var(--text);
-    background: var(--surface-inset);
-    border: 1px solid var(--border);
-    border-radius: var(--r-sm);
-  }
-  .hapus-aksi {
+  .lapis-aksi {
     display: flex;
     justify-content: flex-end;
     gap: var(--sp-2);
   }
-  .hapus-aksi button {
+  .lapis-aksi button {
     height: 40px;
     padding: 0 var(--sp-4);
     font-size: var(--fs-sm);
@@ -444,16 +449,16 @@ const styles = css`
     border: 1px solid var(--border);
     border-radius: var(--r-sm);
   }
-  .hapus-aksi button.bahaya {
+  .lapis-aksi button.bahaya {
     color: #fff;
     background: var(--peringatan);
     border-color: var(--peringatan);
   }
-  .hapus-aksi button:disabled {
+  .lapis-aksi button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
-  .hapus-galat {
+  .lapis-galat {
     margin: 0 0 var(--sp-3);
     font-size: var(--fs-sm);
     color: var(--peringatan);
@@ -586,7 +591,7 @@ export class TeamTable extends BaseElement {
     super();
     this._view = null;
     this._menuTeam = null;
-    // { teamId, nama, ketik, sibuk, galat } saat konfirmasi hapus terbuka.
+    // { teamId, nama, sibuk, galat } saat konfirmasi hapus terbuka.
     this._hapus = null;
   }
 
@@ -763,38 +768,102 @@ export class TeamTable extends BaseElement {
   }
 
   /**
-   * Konfirmasi hapus tim. Nama timnya harus DIKETIK ULANG, bukan sekadar
-   * ditekan "Ya": menu ⋮ dibuka dari baris mana pun yang kebetulan di bawah
-   * jari, dan penghapusan ini membuang roster beserta seluruh berkas yang sudah
-   * dikumpulkan. GAS mencocokkan nama itu sekali lagi di sisinya.
+   * Konfirmasi hapus tim: dialog ya/tidak.
+   *
+   * Nama tim sempat harus diketik ulang. Itu dilepas karena membebani panitia
+   * di setiap penghapusan yang memang disengaja, sementara yang benar-benar
+   * menahan kesalahan sudah ada: aksinya hanya muncul untuk sesi admin, nama
+   * timnya tercetak besar di dialog ini, dan berkasnya masih bisa ditarik dari
+   * sampah Drive selama 30 hari.
    */
   _kotakHapus() {
     const h = this._hapus;
     if (!h) return '';
-    const cocok = h.ketik.trim().toLowerCase() === h.nama.trim().toLowerCase();
     return `
-      <div class="hapus-lapis" role="dialog" aria-modal="true" aria-label="Hapus tim ${esc(h.nama)}">
-        <div class="hapus-kotak">
-          <h3>Hapus tim ini?</h3>
+      <div class="lapis" role="dialog" aria-modal="true" aria-label="Hapus tim ${esc(h.nama)}">
+        <div class="kotak bahaya">
+          <h3>Hapus ${esc(h.nama)}?</h3>
           <p>
-            <b>${esc(h.nama)}</b> akan dibuang dari daftar beserta seluruh berkasnya —
-            logo, ID card, dan foto. Berkasnya masuk sampah Drive (tertahan 30 hari);
-            barisnya sendiri tidak bisa dikembalikan.
+            Timnya dibuang dari daftar beserta seluruh berkasnya — logo, ID card,
+            dan foto. Berkasnya masuk sampah Drive (tertahan 30 hari); barisnya
+            sendiri tidak bisa dikembalikan.
           </p>
-          <p>Ketik nama timnya untuk melanjutkan:</p>
-          ${h.galat ? `<p class="hapus-galat">${esc(h.galat)}</p>` : ''}
-          <input id="ketik-hapus" type="text" autocomplete="off" spellcheck="false"
-                 placeholder="${esc(h.nama)}" value="${esc(h.ketik)}"
-                 ${h.sibuk ? 'disabled' : ''} />
-          <div class="hapus-aksi">
+          ${h.galat ? `<p class="lapis-galat">${esc(h.galat)}</p>` : ''}
+          <div class="lapis-aksi">
             <button type="button" data-act="batal-hapus" ${h.sibuk ? 'disabled' : ''}>Batal</button>
-            <button type="button" class="bahaya" data-act="ya-hapus"
-                    ${cocok && !h.sibuk ? '' : 'disabled'}>
-              ${h.sibuk ? 'Menghapus…' : 'Hapus tim'}
+            <button type="button" class="bahaya" data-act="ya-hapus" ${h.sibuk ? 'disabled' : ''}>
+              ${h.sibuk ? 'Menghapus…' : 'Ya, hapus'}
             </button>
           </div>
         </div>
       </div>`;
+  }
+
+  /**
+   * Kode tim yang baru dibuat, ditampilkan penuh untuk dicatat atau dibacakan.
+   *
+   * Sengaja tidak disembunyikan di balik tombol mata seperti di halaman detail:
+   * kode ini baru saja diminta admin, umurnya 6 jam, dan satu-satunya gunanya
+   * memang untuk diteruskan ke PIC.
+   */
+  _kotakKode() {
+    const k = this._kode;
+    if (!k) return '';
+    const sisa = k.sampai ? sisaWaktu(k.sampai) : '';
+    return `
+      <div class="lapis" role="dialog" aria-modal="true" aria-label="Kode tim ${esc(k.nama)}">
+        <div class="kotak">
+          <h3>Kode tim ${esc(k.nama)}</h3>
+          ${
+            k.sibuk
+              ? '<p>Membuat kode…</p>'
+              : k.galat
+                ? `<p class="lapis-galat">${esc(k.galat)}</p>`
+                : `<p class="kode-besar">${esc(k.kode)}</p>
+                   <p>Berlaku <b>${esc(sisa)}</b> lagi · sampai ${esc(jamMenit(k.sampai))}.
+                      Setelah itu kode ini tidak bisa dipakai lagi.</p>`
+          }
+          <div class="lapis-aksi">
+            ${
+              k.kode
+                ? `<button type="button" data-act="salin-kode">
+                     ${k.tersalin ? 'Tersalin' : 'Salin kode'}
+                   </button>`
+                : ''
+            }
+            <button type="button" class="utama" data-act="tutup-kode" ${k.sibuk ? 'disabled' : ''}>
+              Tutup
+            </button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  /** Buat kode untuk satu tim, lalu tampilkan hasilnya. */
+  async _buatKode(teamId, nama) {
+    this._kode = { teamId, nama, sibuk: true, kode: '', sampai: 0, galat: '' };
+    this.render();
+    try {
+      const hasil = await buatKodeTim(teamId);
+      this._kode = { teamId, nama, sibuk: false, kode: hasil.kode, sampai: hasil.sampai, galat: '' };
+    } catch (error) {
+      this._kode = { teamId, nama, sibuk: false, kode: '', sampai: 0,
+                     galat: error.message || 'Gagal membuat kode tim.' };
+    }
+    this.render();
+  }
+
+  async _salinKode() {
+    const kode = this._kode?.kode;
+    if (!kode) return;
+    try {
+      await navigator.clipboard.writeText(kode);
+      this._kode = { ...this._kode, tersalin: true };
+      this.render();
+    } catch (error) {
+      // Clipboard bisa ditolak (izin, konteks tidak aman). Kodenya tetap
+      // terbaca di layar, jadi tidak ada yang perlu dilaporkan.
+    }
   }
 
   async _jalankanHapus() {
@@ -803,7 +872,7 @@ export class TeamTable extends BaseElement {
     this._hapus = { ...h, sibuk: true, galat: '' };
     this.render();
     try {
-      await hapusTim(h.teamId, h.ketik.trim());
+      await hapusTim(h.teamId);
       // Dibuang dari store, bukan dengan memuat ulang seluruh data: satu baris
       // hilang tidak sepadan dengan pembacaan ulang seluruh spreadsheet.
       buangTim(h.teamId);
@@ -829,9 +898,9 @@ export class TeamTable extends BaseElement {
           this._jalankanHapus();
           return;
         }
-        if (event.target.closest('.hapus-kotak')) return;
+        if (event.target.closest('.kotak')) return;
         // Klik di luar kotak = batal.
-        if (event.target.closest('.hapus-lapis')) {
+        if (event.target.closest('.lapis')) {
           this._hapus = null;
           this.render();
           return;
@@ -848,9 +917,8 @@ export class TeamTable extends BaseElement {
         if (aksi.dataset.act === 'hapus') {
           const tim = store.state.teams.find((t) => t.team_id === teamId);
           if (tim) {
-            this._hapus = { teamId, nama: tim.team_name, ketik: '', sibuk: false, galat: '' };
+            this._hapus = { teamId, nama: tim.team_name, sibuk: false, galat: '' };
             this.render();
-            this.$('#ketik-hapus')?.focus();
           }
           return;
         }
@@ -887,27 +955,21 @@ export class TeamTable extends BaseElement {
     this.listen(window, 'scroll', () => this._tutupMenu(), true);
     this.listen(window, 'resize', () => this._tutupMenu());
 
-    // Ketikan nama tim dicatat TANPA render ulang — render akan membuang fokus
-    // di tengah orang mengetik. Yang perlu ikut berubah hanyalah tombolnya.
-    this.listen(this.shadowRoot, 'input', (event) => {
-      if (event.target.id !== 'ketik-hapus' || !this._hapus) return;
-      this._hapus.ketik = event.target.value;
-      const cocok = this._hapus.ketik.trim().toLowerCase() === this._hapus.nama.trim().toLowerCase();
-      const tombol = this.$('[data-act="ya-hapus"]');
-      if (tombol) tombol.disabled = !cocok;
-    });
-
     this.listen(this.shadowRoot, 'keydown', (event) => {
+      // Esc menutup dialog mana pun yang terbuka — kecuali selagi permintaannya
+      // masih berjalan, karena menutup di tengah jalan hanya menyembunyikan
+      // proses yang tetap berlanjut.
+      if (this._kode) {
+        if (event.key === 'Escape' && !this._kode.sibuk) {
+          this._kode = null;
+          this.render();
+        }
+        return;
+      }
       if (this._hapus) {
         if (event.key === 'Escape' && !this._hapus.sibuk) {
           this._hapus = null;
           this.render();
-        }
-        // Enter di kolom ketik = tekan tombol hapusnya, kalau namanya sudah cocok.
-        if (event.key === 'Enter' && event.target.id === 'ketik-hapus') {
-          event.preventDefault();
-          const cocok = this._hapus.ketik.trim().toLowerCase() === this._hapus.nama.trim().toLowerCase();
-          if (cocok) this._jalankanHapus();
         }
         return;
       }
