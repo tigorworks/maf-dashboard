@@ -9,7 +9,7 @@ import { BaseElement, define } from '../core/element.js';
 import { css } from '../core/css.js';
 import { esc, formatDate, highlight, hueOf, initials, jamMenit, num, sisaWaktu } from '../core/format.js';
 import { buangTim, COLUMNS, matchedMembers, selectTeam, setSort, store } from '../data/app-state.js';
-import { adalahAdmin, bolehSuntingTim, buatKodeTim, hapusTim } from '../data/auth.js';
+import { adalahAdmin, bolehUnggahTim, buatKodeTim, hapusTim, JENIS_KODE } from '../data/auth.js';
 import { periksaTim } from '../data/rules.js';
 import '../ui/ui-pagination.js';
 
@@ -458,6 +458,37 @@ const styles = css`
     opacity: 0.5;
     cursor: not-allowed;
   }
+  /* Dua pilihan wewenang: masing-masing menyebut akibatnya, bukan hanya
+     namanya. Kode yang salah jenis baru ketahuan setelah dibagikan. */
+  .pilih-jenis {
+    display: grid;
+    gap: var(--sp-2);
+    margin-bottom: var(--sp-4);
+  }
+  .pilih-jenis button {
+    display: grid;
+    gap: 2px;
+    padding: var(--sp-3);
+    text-align: left;
+    color: var(--text);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    transition: border-color var(--dur) var(--ease);
+  }
+  .pilih-jenis button:hover {
+    border-color: var(--accent);
+  }
+  .pilih-jenis b {
+    font-size: var(--fs-sm);
+  }
+  .pilih-jenis small {
+    font-size: var(--fs-xs);
+    font-weight: 500;
+    line-height: 1.4;
+    color: var(--text-muted);
+  }
+
   /* Kode dicetak besar, monospasi, dan BERWARNA LAIN dari seluruh isi dialog:
      ia satu-satunya bagian yang perlu disalin atau dibacakan, sedangkan sisanya
      hanya penjelasan. Oranye dipilih karena emas sudah menjadi warna aksi di
@@ -607,6 +638,12 @@ const styles = css`
     }
   }
 `;
+
+const IKON_KUNCI = `<svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+  <path d="M9.4 6.6a2.9 2.9 0 1 0-2.8 2.9L5.2 10.9v1.6h1.6l1.4-1.4 1.2-1.2Z"
+        stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
+  <circle cx="10.6" cy="5.4" r="1" fill="currentColor" />
+</svg>`;
 
 const IKON_PERINGATAN = `<svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
   <path d="M8 2.4 14.6 13.6H1.4L8 2.4Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
@@ -764,7 +801,7 @@ export class TeamTable extends BaseElement {
     // Unggah: admin untuk semua tim, PIC tim hanya untuk timnya. Pengunjung yang
     // belum masuk tidak melihatnya sama sekali — sejak kode tidak lagi
     // ditempelkan per unggahan, layar itu tidak punya jalan masuk untuknya.
-    const bolehUnggah = adalahAdmin() || bolehSuntingTim(teamId);
+    const bolehUnggah = bolehUnggahTim(teamId);
 
     return `
         <button type="button" role="menuitem" data-act="lihat">
@@ -795,13 +832,13 @@ export class TeamTable extends BaseElement {
             : ''
         }
         ${
+          /* Satu butir; pilihan jenisnya muncul di dialog berikutnya. Menu ⋮
+             sudah memuat lima butir untuk admin — memecahnya jadi dua baris
+             kode membuat daftar itu lebih panjang daripada yang bisa dibaca
+             sekilas, padahal keduanya aksi yang sama dengan wewenang berbeda. */
           adalahAdmin()
             ? `<button type="button" role="menuitem" data-act="kode">
-                 <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                   <path d="M9.4 6.6a2.9 2.9 0 1 0-2.8 2.9L5.2 10.9v1.6h1.6l1.4-1.4 1.2-1.2Z"
-                         stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
-                   <circle cx="10.6" cy="5.4" r="1" fill="currentColor" />
-                 </svg>
+                 ${IKON_KUNCI}
                  Buat kode tim
                </button>`
             : ''
@@ -870,13 +907,28 @@ export class TeamTable extends BaseElement {
         <div class="kotak">
           <h3>Kode tim ${esc(k.nama)}</h3>
           ${
-            k.sibuk
+            k.memilih
+              ? `<p>Pilih wewenang yang diberikan kode ini. Keduanya berlaku 6 jam.</p>
+                 <div class="pilih-jenis">
+                   <button type="button" data-act="pilih-penuh">
+                     <b>Ubah data + unggah berkas</b>
+                     <small>Membetulkan nick, ID game, server; menambah pemain; mengunggah berkas.</small>
+                   </button>
+                   <button type="button" data-act="pilih-unggah">
+                     <b>Unggah berkas saja</b>
+                     <small>Hanya logo, ID card, dan foto. Data pemain tidak bisa disentuh.</small>
+                   </button>
+                 </div>`
+              : k.sibuk
               ? '<p>Membuat kode…</p>'
               : k.galat
                 ? `<p class="lapis-galat">${esc(k.galat)}</p>`
                 : `<p class="kode-besar">${esc(k.kode)}</p>
-                   <p>Berlaku <b>${esc(sisa)}</b> lagi · sampai ${esc(jamMenit(k.sampai))}.
-                      Setelah itu kode ini tidak bisa dipakai lagi.</p>`
+                   <p>
+                     <b>${k.jenis === JENIS_KODE.PENUH ? 'Ubah data + unggah berkas' : 'Unggah berkas saja'}</b><br />
+                     Berlaku ${esc(sisa)} lagi · sampai ${esc(jamMenit(k.sampai))}.
+                     Setelah itu kode ini tidak bisa dipakai lagi.
+                   </p>`
           }
           <div class="lapis-aksi">
             ${
@@ -886,23 +938,29 @@ export class TeamTable extends BaseElement {
                    </button>`
                 : ''
             }
-            <button type="button" class="utama" data-act="tutup-kode" ${k.sibuk ? 'disabled' : ''}>
-              Tutup
-            </button>
+            ${k.memilih ? '<button type="button" data-act="tutup-kode">Batal</button>' : ''}
+            ${
+              k.memilih
+                ? ''
+                : `<button type="button" class="utama" data-act="tutup-kode" ${k.sibuk ? 'disabled' : ''}>
+                     Tutup
+                   </button>`
+            }
           </div>
         </div>
       </div>`;
   }
 
   /** Buat kode untuk satu tim, lalu tampilkan hasilnya. */
-  async _buatKode(teamId, nama) {
-    this._kode = { teamId, nama, sibuk: true, kode: '', sampai: 0, galat: '' };
+  async _buatKode(teamId, nama, jenis) {
+    this._kode = { teamId, nama, jenis, memilih: false, sibuk: true, kode: '', sampai: 0, galat: '' };
     this.render();
     try {
-      const hasil = await buatKodeTim(teamId);
-      this._kode = { teamId, nama, sibuk: false, kode: hasil.kode, sampai: hasil.sampai, galat: '' };
+      const hasil = await buatKodeTim(teamId, jenis);
+      this._kode = { teamId, nama, jenis: hasil.jenis, sibuk: false,
+                     kode: hasil.kode, sampai: hasil.sampai, galat: '' };
     } catch (error) {
-      this._kode = { teamId, nama, sibuk: false, kode: '', sampai: 0,
+      this._kode = { teamId, nama, jenis, sibuk: false, kode: '', sampai: 0,
                      galat: error.message || 'Gagal membuat kode tim.' };
     }
     this.render();
@@ -944,6 +1002,12 @@ export class TeamTable extends BaseElement {
       // Lapisan konfirmasi diperiksa PALING awal: ia menutupi tabel, dan
       // klik apa pun di dalamnya tidak boleh merembes jadi "buka tim".
       if (this._kode) {
+        const pilih = event.target.closest('[data-act="pilih-penuh"], [data-act="pilih-unggah"]');
+        if (pilih) {
+          const jenis = pilih.dataset.act === 'pilih-penuh' ? JENIS_KODE.PENUH : JENIS_KODE.UNGGAH;
+          this._buatKode(this._kode.teamId, this._kode.nama, jenis);
+          return;
+        }
         if (event.target.closest('[data-act="salin-kode"]')) {
           this._salinKode();
           return;
@@ -986,7 +1050,12 @@ export class TeamTable extends BaseElement {
 
         if (aksi.dataset.act === 'kode') {
           const tim = store.state.teams.find((t) => t.team_id === teamId);
-          if (tim) this._buatKode(teamId, tim.team_name);
+          // Belum membuat apa pun: dialognya bertanya dulu jenis wewenangnya.
+          if (tim) {
+            this._kode = { teamId, nama: tim.team_name, memilih: true,
+                           jenis: '', sibuk: false, kode: '', sampai: 0, galat: '' };
+            this.render();
+          }
           return;
         }
 

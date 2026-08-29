@@ -15,7 +15,7 @@ const FETCH_TIMEOUT = 20000;
  * spreadsheet tidak perlu dibagikan ke publik, dan kolom sensitif (NIP, nomor
  * telepon, email, Kode Tim) disaring di server — tidak pernah sampai ke browser.
  */
-export const GAS_URL = 'https://script.google.com/macros/s/AKfycbyTZkw53mte8AgwUzBGg77gDQQ__E1vwNG84JpKd0ApxQ-gsCz4xPQ3Czt3Ye9t1qZLjg/exec';
+export const GAS_URL = 'https://script.google.com/macros/s/AKfycbysWHzdr17_pRCqbrQm2Ix1ryfaAR3SQ0eZjZv59L_CSHHcXiGLvM-qbBLexzOjmk9B3A/exec';
 
 export const GAME_META = {
   MLBB: {
