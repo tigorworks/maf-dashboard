@@ -9,7 +9,7 @@ import { BaseElement, define } from '../core/element.js';
 import { css } from '../core/css.js';
 import { esc, formatDate, highlight, hueOf, initials, jamMenit, num, sisaWaktu } from '../core/format.js';
 import { buangTim, COLUMNS, matchedMembers, selectTeam, setSort, store } from '../data/app-state.js';
-import { adalahAdmin, buatKodeTim, hapusTim } from '../data/auth.js';
+import { adalahAdmin, bolehSuntingTim, buatKodeTim, hapusTim } from '../data/auth.js';
 import { periksaTim } from '../data/rules.js';
 import '../ui/ui-pagination.js';
 
@@ -458,9 +458,38 @@ const styles = css`
     opacity: 0.5;
     cursor: not-allowed;
   }
-  .lapis-galat {
+  /* Kode dicetak besar, monospasi, dan BERWARNA LAIN dari seluruh isi dialog:
+     ia satu-satunya bagian yang perlu disalin atau dibacakan, sedangkan sisanya
+     hanya penjelasan. Oranye dipilih karena emas sudah menjadi warna aksi di
+     mana-mana (tombol, tautan, sorotan pencarian) — kode yang ikut memakainya
+     akan terbaca seperti tombol lain.
+     Pemilihnya ditulis dengan tipe (p.kode-besar), bukan kelas saja: aturan
+     "kotak p" di atas punya kekhususan lebih tinggi (kelas + tipe), jadi versi
+     tanpa tipe kalah dan kodenya tampil kecil serta kelabu seperti paragraf
+     biasa. */
+  .kotak p.kode-besar {
+    margin: 0 0 var(--sp-3);
+    font-family: var(--font-mono);
+    font-size: 34px;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    line-height: 1.15;
+    color: var(--brand-orange);
+    overflow-wrap: anywhere;
+  }
+  .lapis-aksi button.utama {
+    color: var(--accent-contrast, #08121f);
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  /* Aturan "kotak p" di atas juga mengenai paragraf ini dan kekhususannya lebih
+     tinggi, jadi tanpa tipe di sini pesan galatnya ikut kelabu — persis warna
+     teks penjelasan biasa, padahal ia satu-satunya kalimat yang menuntut
+     tindakan. */
+  .kotak p.lapis-galat {
     margin: 0 0 var(--sp-3);
     font-size: var(--fs-sm);
+    font-weight: 600;
     color: var(--peringatan);
   }
 
@@ -604,10 +633,7 @@ export class TeamTable extends BaseElement {
   render() {
     const view = this._view;
     if (!view) return;
-    const { sort, filters, auth } = store.state;
-    // Relawan tidak berwenang mengunggah — GAS menolaknya. Menyisakan menunya
-    // hanya menuntun mereka ke layar yang berujung penolakan.
-    const bolehUnggah = auth?.peran !== 'relawan';
+    const { sort, filters } = store.state;
 
     this.shadowRoot.innerHTML = `
       <div class="scroll">
@@ -645,50 +671,9 @@ export class TeamTable extends BaseElement {
                      shown="${view.rows.length}" offset="${view.offset}"
                      unit="tim"></ui-pagination>
 
-      <div class="menu" role="menu" hidden>
-        <button type="button" role="menuitem" data-act="lihat">
-          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <path d="M1.5 8S3.9 3.5 8 3.5 14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8Z"
-                  stroke="currentColor" stroke-width="1.5" />
-            <circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.5" />
-          </svg>
-          Lihat tim
-        </button>
-        ${
-          bolehUnggah
-            ? `<button type="button" role="menuitem" data-act="unggah">
-                 <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                   <path d="M8 10.5V2m0 0L5 5m3-3 3 3M2.5 11v1.5a1.5 1.5 0 0 0 1.5 1.5h8a1.5 1.5 0 0 0 1.5-1.5V11"
-                         stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-                 </svg>
-                 Unggah berkas
-               </button>
-               <button type="button" role="menuitem" data-act="foto">
-                 <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                   <path d="M2 5.6a1.6 1.6 0 0 1 1.6-1.6h1.1l.8-1.3h4.6l.8 1.3h1.5A1.6 1.6 0 0 1 14 5.6v6.2a1.6 1.6 0 0 1-1.6 1.6H3.6A1.6 1.6 0 0 1 2 11.8V5.6Z"
-                         stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
-                   <circle cx="8" cy="8.6" r="2.4" stroke="currentColor" stroke-width="1.4" />
-                 </svg>
-                 Unggah foto
-               </button>`
-            : ''
-        }
-        ${
-          /* Hapus dipisah garis dan diberi warna peringatan: ia bertetangga
-             dengan aksi sehari-hari di menu yang sama, dan satu-satunya di sini
-             yang tidak bisa dibatalkan. */
-          adalahAdmin()
-            ? `<button type="button" role="menuitem" class="bahaya" data-act="hapus">
-                 <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                   <path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8a1 1 0 0 0 1 .9h3.8a1 1 0 0 0 1-.9l.6-8"
-                         stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
-                 </svg>
-                 Hapus tim
-               </button>`
-            : ''
-        }
-      </div>
-      ${this._kotakHapus()}`;
+      <div class="menu" role="menu" hidden></div>
+      ${this._kotakHapus()}
+      ${this._kotakKode()}`;
 
     // render() mengganti seluruh innerHTML, jadi menu yang sedang terbuka ikut
     // terbuang — status internalnya harus ikut disetel ulang.
@@ -765,6 +750,76 @@ export class TeamTable extends BaseElement {
           </button>
         </td>
       </tr>`;
+  }
+
+  /**
+   * Isi menu ⋮ untuk SATU tim.
+   *
+   * Dibangun saat menunya dibuka, bukan sekali untuk seluruh tabel: butirnya
+   * kini bergantung pada tim yang ditunjuk. PIC tim yang sudah masuk hanya
+   * berwenang atas timnya sendiri, jadi menu di baris tim lain tidak boleh
+   * menawarkan unggahan yang pasti ditolak GAS.
+   */
+  _isiMenu(teamId) {
+    // Unggah: admin untuk semua tim, PIC tim hanya untuk timnya. Pengunjung yang
+    // belum masuk tidak melihatnya sama sekali — sejak kode tidak lagi
+    // ditempelkan per unggahan, layar itu tidak punya jalan masuk untuknya.
+    const bolehUnggah = adalahAdmin() || bolehSuntingTim(teamId);
+
+    return `
+        <button type="button" role="menuitem" data-act="lihat">
+          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M1.5 8S3.9 3.5 8 3.5 14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8Z"
+                  stroke="currentColor" stroke-width="1.5" />
+            <circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.5" />
+          </svg>
+          Lihat tim
+        </button>
+        ${
+          bolehUnggah
+            ? `<button type="button" role="menuitem" data-act="unggah">
+                 <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                   <path d="M8 10.5V2m0 0L5 5m3-3 3 3M2.5 11v1.5a1.5 1.5 0 0 0 1.5 1.5h8a1.5 1.5 0 0 0 1.5-1.5V11"
+                         stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                 </svg>
+                 Unggah berkas
+               </button>
+               <button type="button" role="menuitem" data-act="foto">
+                 <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                   <path d="M2 5.6a1.6 1.6 0 0 1 1.6-1.6h1.1l.8-1.3h4.6l.8 1.3h1.5A1.6 1.6 0 0 1 14 5.6v6.2a1.6 1.6 0 0 1-1.6 1.6H3.6A1.6 1.6 0 0 1 2 11.8V5.6Z"
+                         stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
+                   <circle cx="8" cy="8.6" r="2.4" stroke="currentColor" stroke-width="1.4" />
+                 </svg>
+                 Unggah foto
+               </button>`
+            : ''
+        }
+        ${
+          adalahAdmin()
+            ? `<button type="button" role="menuitem" data-act="kode">
+                 <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                   <path d="M9.4 6.6a2.9 2.9 0 1 0-2.8 2.9L5.2 10.9v1.6h1.6l1.4-1.4 1.2-1.2Z"
+                         stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
+                   <circle cx="10.6" cy="5.4" r="1" fill="currentColor" />
+                 </svg>
+                 Buat kode tim
+               </button>`
+            : ''
+        }
+        ${
+          /* Hapus dipisah garis dan diberi warna peringatan: ia bertetangga
+             dengan aksi sehari-hari di menu yang sama, dan satu-satunya di sini
+             yang tidak bisa dibatalkan. */
+          adalahAdmin()
+            ? `<button type="button" role="menuitem" class="bahaya" data-act="hapus">
+                 <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                   <path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8a1 1 0 0 0 1 .9h3.8a1 1 0 0 0 1-.9l.6-8"
+                         stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+                 </svg>
+                 Hapus tim
+               </button>`
+            : ''
+        }`;
   }
 
   /**
@@ -888,6 +943,21 @@ export class TeamTable extends BaseElement {
     this.listen(this.shadowRoot, 'click', (event) => {
       // Lapisan konfirmasi diperiksa PALING awal: ia menutupi tabel, dan
       // klik apa pun di dalamnya tidak boleh merembes jadi "buka tim".
+      if (this._kode) {
+        if (event.target.closest('[data-act="salin-kode"]')) {
+          this._salinKode();
+          return;
+        }
+        // Selagi kodenya sedang dibuat, menutup dialog hanya menyembunyikan
+        // permintaan yang tetap berjalan — dan hasilnya tidak pernah terbaca.
+        if (this._kode.sibuk) return;
+        if (event.target.closest('[data-act="tutup-kode"]') || !event.target.closest('.kotak')) {
+          this._kode = null;
+          this.render();
+        }
+        return;
+      }
+
       if (this._hapus) {
         if (event.target.closest('[data-act="batal-hapus"]')) {
           this._hapus = null;
@@ -913,6 +983,12 @@ export class TeamTable extends BaseElement {
         const teamId = this._menuTeam;
         this._tutupMenu();
         if (!teamId) return;
+
+        if (aksi.dataset.act === 'kode') {
+          const tim = store.state.teams.find((t) => t.team_id === teamId);
+          if (tim) this._buatKode(teamId, tim.team_name);
+          return;
+        }
 
         if (aksi.dataset.act === 'hapus') {
           const tim = store.state.teams.find((t) => t.team_id === teamId);
@@ -1002,6 +1078,9 @@ export class TeamTable extends BaseElement {
 
     this._menuTeam = burger.dataset.menu;
     burger.setAttribute('aria-expanded', 'true');
+    // Isinya dibangun dulu: ukurannya menentukan penempatan, dan butirnya
+    // berbeda-beda per tim.
+    menu.innerHTML = this._isiMenu(this._menuTeam);
     menu.hidden = false;
 
     const kotak = burger.getBoundingClientRect();

@@ -13,14 +13,14 @@
  */
 import { BaseElement, define } from '../core/element.js';
 import { css } from '../core/css.js';
-import { esc, formatDate, hueOf, initials, jamMenit, num, sisaWaktu, year } from '../core/format.js';
+import { esc, formatDate, hueOf, initials, num, sisaWaktu, year } from '../core/format.js';
 import { GAME_META } from '../data/source.js';
 import {
   applyPlayerPatch, applyUpload, caborTerkunci, gantiRoster, selectTeam, store,
 } from '../data/app-state.js';
 import { ACCEPTED_TYPES, uploadTeamFile } from '../data/upload.js';
 import {
-  adalahAdmin, adalahRelawan, adalahTim, ambilIdCard, ambilKodeTim, bolehLihatIdCard,
+  adalahAdmin, adalahTim, ambilIdCard, ambilKodeTim, bolehLihatIdCard,
   bolehSuntingTim, buatKodeTim, onAuth, sesiSekarang, simpanRoster,
 } from '../data/auth.js';
 import { periksaTim } from '../data/rules.js';
@@ -436,10 +436,30 @@ const styles = css`
     text-transform: uppercase;
     color: var(--text-faint);
   }
+  /* Satu baris memuat semuanya: kode, tombolnya, sisa waktu, dan tombol buat
+     ulang. Sebelumnya kelimanya menumpuk jadi lima baris dan blok ini memakan
+     lebih banyak ruang daripada seluruh daftar penanggung jawab di sebelahnya —
+     padahal isinya satu nilai pendek.
+     Dibungkus (wrap) supaya di layar sempit ia turun dengan rapi, bukan
+     menembus tepi. */
   .kode-baris {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--sp-2);
+  }
+  .kode-baris .kode-nota {
+    margin: 0;
+  }
+  /* Angka sisa waktunya sedikit lebih terang daripada kalimat di sekitarnya:
+     itu satu-satunya bagian yang menentukan apakah kode ini masih layak
+     dibagikan. */
+  .kode-baris .kode-nota b {
+    color: var(--text-muted);
+  }
+  .kode-baris .kode-buat {
+    margin-top: 0;
+    height: 30px;
   }
   /* Seukuran nama di kelompok sebelahnya (.pj-teks), bukan lebih besar:
      kode ini bukan informasi yang dibaca terus-menerus — ia diminta sekali
@@ -452,15 +472,19 @@ const styles = css`
     letter-spacing: 0.1em;
     color: var(--text-muted);
   }
+  /* Kode yang sedang terbuka memakai oranye, sama dengan dialog di daftar tim.
+     Emas di dashboard ini sudah berarti "aksi" — tombol, tautan, sorotan
+     pencarian — sedangkan kode adalah NILAI yang disalin, bukan sesuatu yang
+     ditekan. Satu warna khusus membuatnya langsung terpisah dari sekitarnya. */
   .kode-nilai.terbuka {
-    color: var(--gold, var(--accent));
+    color: var(--brand-orange);
   }
   .kode-mata {
     display: grid;
     place-items: center;
     flex: none;
-    width: 28px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
     color: var(--text-faint);
     background: var(--surface);
     border: 1px solid var(--border);
@@ -567,7 +591,6 @@ const styles = css`
     margin-bottom: var(--sp-4);
     border-bottom: 1px solid var(--border);
   }
-  .kode-blok label,
   .kode-label {
     display: block;
     margin-bottom: 6px;
@@ -576,27 +599,6 @@ const styles = css`
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--text-faint);
-  }
-  .kode-blok input {
-    width: 100%;
-    max-width: 340px;
-    height: 46px;
-    padding: 0 var(--sp-4);
-    font: inherit;
-    font-family: var(--font-mono);
-    font-size: var(--fs-lg);
-    font-weight: 700;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--text);
-    background: var(--surface-2);
-    border: 1.5px solid var(--border);
-    border-radius: var(--r-sm);
-    outline: 0;
-  }
-  .kode-blok input:focus {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--accent-soft);
   }
   .kode-blok.admin .kode-label {
     color: var(--brand-gold, var(--accent));
@@ -729,11 +731,6 @@ const styles = css`
     color: var(--text-muted);
     background: var(--surface-2);
     border: 1px solid var(--border);
-  }
-  /* Kolom kode ikut ditandai saat yang salah memang kodenya. */
-  .kode-blok.salah input {
-    border-color: var(--peringatan);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--peringatan) 22%, transparent);
   }
 
   .terkunci {
@@ -878,8 +875,7 @@ const styles = css`
     cursor: progress;
   }
   /* Selagi antrean dikirim, memilih berkas baru hanya akan membingungkan. */
-  .mode-unggah.menyimpan .unggah,
-  .mode-unggah.menyimpan .kode-blok input {
+  .mode-unggah.menyimpan .unggah {
     pointer-events: none;
     opacity: 0.55;
   }
@@ -912,9 +908,6 @@ const styles = css`
     .unggah-bar {
       grid-template-columns: 1fr;
       align-items: stretch;
-    }
-    .kode-blok input {
-      max-width: none;
     }
     /* Di baris sesempit ini "SUDAH/BELUM" mengalah demi nama pemain — status
        diamnya sudah terbaca dari warna barisnya. Yang sedang BERGERAK tetap
@@ -1588,6 +1581,16 @@ const IKON_FOTO = `<svg viewBox="0 0 16 16" fill="none" aria-hidden="true" style
   <circle cx="8" cy="8.6" r="2.4" stroke="currentColor" stroke-width="1.3" />
 </svg>`;
 
+/* Panah melingkar: "buat ulang". Tanpa teks, bentuk inilah satu-satunya
+   penjelas — jadi lingkarannya dibiarkan hampir penuh dengan satu mata panah,
+   bukan dua busur kecil yang di ukuran 15 px terbaca seperti noda. */
+const IKON_ULANG = `<svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+  <path d="M13.2 8a5.2 5.2 0 1 1-1.6-3.7" stroke="currentColor" stroke-width="1.6"
+        stroke-linecap="round" />
+  <path d="M13.4 2.6v2.6h-2.6" stroke="currentColor" stroke-width="1.6"
+        stroke-linecap="round" stroke-linejoin="round" />
+</svg>`;
+
 const IKON_MATA = `<svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
   <path d="M1.5 8S3.9 3.6 8 3.6 14.5 8 14.5 8 12.1 12.4 8 12.4 1.5 8 1.5 8Z"
         stroke="currentColor" stroke-width="1.4" />
@@ -1621,7 +1624,6 @@ export class TeamDetail extends BaseElement {
     this._team = null;
     // Dipertahankan lintas render: unggahan memicu render ulang, dan tanpa ini
     // kode yang sudah diketik serta pesan hasilnya akan terhapus.
-    this._kode = '';
     this._pesanTeks = '';
     this._pesanJenis = '';
     // Mode sunting berlaku untuk SATU TIM sekaligus, bukan per pemain.
@@ -1632,7 +1634,8 @@ export class TeamDetail extends BaseElement {
     this._lihat = null; // { playerId, nama, dataUrl, memuat, galat }
     this._mode = 'lihat'; // 'lihat' (verifikasi) | 'berkas' (logo & ID card) | 'foto'
     this._kodeTim = null; // { memuat } | { kode, sampai } | { galat } — khusus admin
-    this._kodeSibuk = false;
+    this._kodeMemuat = false; // permintaan keadaan kode sedang berjalan
+    this._kodeSibuk = false; // tombol "Buat kode" sedang bekerja
     this._idcard = {}; // cache pratinjau per playerId
     // Pratinjau LOKAL berkas yang baru dipilih, sebelum/selagi dikirim.
     // Dikunci per sasaran (teamId untuk logo & foto tim, playerId untuk sisanya)
@@ -1663,14 +1666,34 @@ export class TeamDetail extends BaseElement {
     const bolehUbah = admin || timSendiri;
     // ID card tim lain tidak akan dikirim GAS, jadi jangan diminta sama sekali.
     const bolehIdCard = bolehLihatIdCard(team.team_id);
+
+    // Keadaan Kode Tim ditanyakan sekali saat panel dibuka.
+    //
+    // Dulu ia hanya diambil ketika tombol mata ditekan, dan itu masuk akal
+    // selama kode bersifat permanen: ia PASTI ada, jadi tidak ada yang perlu
+    // diketahui lebih awal. Sejak kode dibuat sesuai kebutuhan dan mati sendiri,
+    // panel ini harus tahu ADA atau TIDAK sebelum menggambar apa pun — tanpa
+    // itu, tim yang kodenya baru saja dibuat dari daftar tim tetap tampil
+    // seolah belum punya kode.
+    //
+    // Dipanggil SEBELUM markup disusun: penandaan "sedang memuat" terjadi
+    // serentak di dalamnya, jadi render ini langsung menggambar keadaan yang
+    // benar alih-alih berkedip lewat "belum ada kode" dulu.
+    if (admin) this._muatKode();
     // Dua mode yang sengaja dipisah. "Lihat tim" adalah layar VERIFIKASI: tidak
     // ada satu pun field unggahan di sana, supaya tidak ada yang salah tekan
     // sambil membaca data. "Unggah berkas" adalah layar KERJA BERKAS.
     // Relawan dipaksa ke layar verifikasi walaupun URL-nya menunjuk /berkas:
     // menu unggahnya memang disembunyikan, tapi tautan lama atau alamat yang
     // diketik tangan tidak boleh menjatuhkan mereka ke layar yang tak berguna.
-    const unggah = this._mode === 'berkas' && !adalahRelawan();
-    const foto = this._mode === 'foto' && !adalahRelawan();
+    // Layar unggah hanya terbuka untuk yang benar-benar boleh mengunggah tim
+    // INI: admin, atau PIC tim yang sudah masuk dengan kode timnya. Sebelumnya
+    // siapa pun bisa membukanya lalu menempelkan kode; kini kodenya sudah
+    // dipakai saat masuk, jadi tidak ada gunanya membuka layar yang pasti
+    // ditolak GAS. Alamat yang diketik tangan pun jatuh ke layar verifikasi.
+    const bolehUnggah = admin || timSendiri;
+    const unggah = this._mode === 'berkas' && bolehUnggah;
+    const foto = this._mode === 'foto' && bolehUnggah;
     // Berkas yang sudah dipilih tapi belum terkirim. Angkanya dipakai bilah
     // simpan di mode ubah, supaya satu tombol Simpan mengurus keduanya.
     const antreBerkas = Object.keys(this._pilihan).length;
@@ -1828,20 +1851,18 @@ export class TeamDetail extends BaseElement {
       <section class="berkas">
         <div class="unggah-bar">
           ${
-            /* Kode tim tidak diminta lagi kalau sesinya sendiri sudah mengikat
-               tim ini — kode itulah yang dipakai untuk masuk. Meminta ulang
-               hanya membuat PIC menempelkannya berkali-kali untuk tiap berkas. */
-            admin || timSendiri
-              ? `<div class="kode-blok admin">
-                   <span class="kode-label">Masuk sebagai ${admin ? 'admin' : 'PIC tim'}</span>
-                   <span class="kode-nota">Kode tim tidak diperlukan.</span>
-                 </div>`
-              : `<div class="kode-blok">
-                   <label for="kode">Kode tim</label>
-                   <input type="password" id="kode" inputmode="latin" autocomplete="off"
-                          spellcheck="false" maxlength="16" placeholder="MASUKKAN KODE"
-                          value="${esc(this._kode)}" />
-                 </div>`
+            /* Tidak ada lagi kolom Kode Tim di sini.
+               Wewenang unggah kini sepenuhnya dari sesi: PIC masuk sekali dengan
+               Kode Tim-nya, lalu bekerja. Menempelkan kode di tiap unggahan
+               berarti kredensial itu berkeliaran di formulir, tangkapan layar,
+               dan riwayat isian browser — untuk keuntungan yang tidak ada,
+               karena sesinya toh sudah membuktikan hal yang sama. */
+            `<div class="kode-blok admin">
+               <span class="kode-label">Masuk sebagai ${admin ? 'admin' : 'PIC tim'}</span>
+               <span class="kode-nota">${
+                 admin ? 'Berlaku untuk semua tim.' : 'Hanya untuk tim ini.'
+               }</span>
+             </div>`
           }
 
           <div class="logo-mini ${adaLogo ? '' : 'wajib'} ${esc(this._statusPilihan(kunciLogo))}">
@@ -1990,20 +2011,18 @@ export class TeamDetail extends BaseElement {
       <section class="berkas">
         <div class="unggah-bar">
           ${
-            /* Kode tim tidak diminta lagi kalau sesinya sendiri sudah mengikat
-               tim ini — kode itulah yang dipakai untuk masuk. Meminta ulang
-               hanya membuat PIC menempelkannya berkali-kali untuk tiap berkas. */
-            admin || timSendiri
-              ? `<div class="kode-blok admin">
-                   <span class="kode-label">Masuk sebagai ${admin ? 'admin' : 'PIC tim'}</span>
-                   <span class="kode-nota">Kode tim tidak diperlukan.</span>
-                 </div>`
-              : `<div class="kode-blok">
-                   <label for="kode">Kode tim</label>
-                   <input type="password" id="kode" inputmode="latin" autocomplete="off"
-                          spellcheck="false" maxlength="16" placeholder="MASUKKAN KODE"
-                          value="${esc(this._kode)}" />
-                 </div>`
+            /* Tidak ada lagi kolom Kode Tim di sini.
+               Wewenang unggah kini sepenuhnya dari sesi: PIC masuk sekali dengan
+               Kode Tim-nya, lalu bekerja. Menempelkan kode di tiap unggahan
+               berarti kredensial itu berkeliaran di formulir, tangkapan layar,
+               dan riwayat isian browser — untuk keuntungan yang tidak ada,
+               karena sesinya toh sudah membuktikan hal yang sama. */
+            `<div class="kode-blok admin">
+               <span class="kode-label">Masuk sebagai ${admin ? 'admin' : 'PIC tim'}</span>
+               <span class="kode-nota">${
+                 admin ? 'Berlaku untuk semua tim.' : 'Hanya untuk tim ini.'
+               }</span>
+             </div>`
           }
 
           <div class="logo-mini ${esc(this._statusPilihan(kunciFotoTim))}">
@@ -2089,21 +2108,34 @@ export class TeamDetail extends BaseElement {
     // Kode yang sudah lewat waktunya diperlakukan sama dengan tidak ada.
     const adaKode = Boolean(k?.kode) && Boolean(sisa);
 
+    // Belum ada kode: yang ditampilkan HANYA tombol pembuatnya.
+    //
+    // Menampilkan baris kode kosong berisi "—" beserta tombol mata dan tombol
+    // salin yang keduanya mati hanya menyodorkan tiga kendali yang tidak bisa
+    // dipakai, dan membuat panitia mengira ada kode yang gagal dimuat. Yang
+    // benar-benar bisa dilakukan di keadaan ini cuma satu.
+    if (!adaKode && !k?.memuat) {
+      return `
+        <div class="pj-grup">
+          <h3>Kode tim</h3>
+          <div class="kode-baris">
+            <button class="kode-buat" type="button" data-act="buat-kode"
+                    title="Kode berlaku 6 jam sejak dibuat"
+                    ${this._kodeSibuk ? 'disabled' : ''}>
+              ${this._kodeSibuk ? 'Membuat…' : 'Buat kode tim'}
+            </button>
+            <span class="kode-nota">${k?.galat ? esc(k.galat) : 'belum ada kode aktif'}</span>
+          </div>
+        </div>`;
+    }
+
     return `
       <div class="pj-grup">
         <h3>Kode tim</h3>
         <div class="kode-baris">
           <span class="kode-nilai ${terbuka ? 'terbuka' : ''}">
             ${
-              k?.memuat
-                ? 'Mengambil…'
-                : k?.galat
-                  ? esc(k.galat)
-                  : !adaKode
-                    ? '—'
-                    : terbuka
-                      ? esc(k.kode)
-                      : '•'.repeat(panjang)
+              k?.memuat ? 'Mengambil…' : terbuka ? esc(k.kode) : '•'.repeat(panjang)
             }
           </span>
           <button class="kode-mata" type="button" data-act="lihat-kode"
@@ -2121,21 +2153,24 @@ export class TeamDetail extends BaseElement {
                  </button>`
               : ''
           }
+          ${
+            /* Tombol buat ulang: ikon saja, sebaris dengan tombol mata dan
+               salin. Masa berlakunya tidak lagi ditulis di sini — halaman Kode
+               Tim dan popup pembuatannya sudah menyebutkannya, dan di panel ini
+               ia hanya menambah teks yang dibaca sekali lalu diabaikan.
+               Judul tombol tetap memuat peringatan dan sisa waktunya, sehingga
+               keduanya tersedia saat benar-benar dibutuhkan: pada detik
+               seseorang menimbang menekannya. */
+            adaKode
+              ? `<button class="kode-mata" type="button" data-act="buat-kode"
+                         aria-label="Buat ulang kode tim"
+                         title="Buat ulang kode tim — berlaku ${esc(sisa)} lagi, membuat ulang membatalkan yang sekarang"
+                         ${this._kodeSibuk ? 'disabled' : ''}>
+                   ${IKON_ULANG}
+                 </button>`
+              : ''
+          }
         </div>
-        ${
-          /* Kode ini kredensial berjangka: yang perlu dilihat panitia bukan
-             sekadar "apa kodenya", tapi "masih hidup berapa lama". Tanpa itu,
-             kode yang sudah mati tetap terlihat sah dan tetap dibagikan. */
-          adaKode
-            ? `<p class="kode-nota">
-                 Berlaku <b>${esc(sisa)}</b> lagi · sampai ${esc(jamMenit(k.sampai))}
-               </p>`
-            : '<p class="kode-nota">Belum ada kode aktif untuk tim ini.</p>'
-        }
-        <button class="kode-buat" type="button" data-act="buat-kode" ${this._kodeSibuk ? 'disabled' : ''}>
-          ${this._kodeSibuk ? 'Membuat…' : adaKode ? 'Buat ulang' : 'Buat kode'}
-        </button>
-        ${adaKode ? '<p class="kode-nota">Membuat ulang membatalkan kode yang sekarang.</p>' : ''}
       </div>`;
   }
 
@@ -2164,6 +2199,36 @@ export class TeamDetail extends BaseElement {
       this.render();
       this._pesan(error.message || 'Gagal membuat kode tim.', 'galat');
     }
+  }
+
+  /**
+   * Ambil keadaan Kode Tim untuk tim yang sedang dibuka — sekali saja.
+   *
+   * Kodenya ikut terbawa, tapi TETAP TERTUTUP di layar sampai tombol mata
+   * ditekan. Itu menjaga alasan aslinya: kredensial tidak seharusnya tergeletak
+   * terbaca setiap kali sebuah tim dibuka, apalagi saat layar dibagikan atau
+   * dipotret.
+   */
+  async _muatKode() {
+    const team = this._team;
+    if (!team || this._kodeMemuat) return;
+    // Sudah ada jawabannya (termasuk "tidak ada kode") -> tidak perlu bertanya lagi.
+    if (this._kodeTim && !this._kodeTim.memuat) return;
+
+    this._kodeMemuat = true;
+    // Sinkron, sebelum await pertama — inilah yang dibaca render yang sedang
+    // memanggil fungsi ini.
+    this._kodeTim = { memuat: true };
+    try {
+      const daftar = await ambilKodeTim({ teamId: team.team_id });
+      // Daftar kosong = belum ada kode aktif. Bukan galat.
+      this._kodeTim = { kode: daftar[0]?.kode || '', sampai: daftar[0]?.sampai || 0 };
+    } catch (error) {
+      this._kodeTim = { galat: error.message || 'Gagal mengambil kode' };
+    }
+    this._kodeMemuat = false;
+    // Tim bisa sudah berganti selagi permintaan berjalan.
+    if (this._team?.team_id === team.team_id) this.render();
   }
 
   /** Tampilkan / sembunyikan kode; ambil dari GAS hanya saat pertama diminta. */
@@ -2697,13 +2762,13 @@ export class TeamDetail extends BaseElement {
         // sebelumnya. Pratinjau ikut dibuang karena ia data pribadi yang tidak
         // perlu menetap di memori lebih lama dari kebutuhannya.
         if (team?.team_id !== this._team?.team_id) {
-          this._kode = '';
           this._pesanTeks = '';
           this._pesanJenis = '';
           this._sunting = false;
           this._lihat = null;
           this._idcard = {};
           this._kodeTim = null;
+          this._kodeMemuat = false;
           this._kodeTampil = false;
           this._lepasPilihan();
         }
@@ -2716,7 +2781,7 @@ export class TeamDetail extends BaseElement {
         this.requestRender();
         // Hanya saat benar-benar berpindah tim — render ulang akibat unggahan
         // tidak boleh merebut fokus dari apa pun yang sedang dipakai.
-        if (timBaru) this._fokusAwal(state.selectedFocus);
+        if (timBaru) this._fokusAwal();
       }, true)
     );
 
@@ -2841,10 +2906,6 @@ export class TeamDetail extends BaseElement {
     });
 
     this.listen(this.shadowRoot, 'input', (event) => {
-      if (event.target.id === 'kode') {
-        this._kode = event.target.value;
-        return;
-      }
       this._catatKetikan(event.target);
     });
     // <select> tidak memancarkan 'input' di semua browser lama; 'change' ikut
@@ -3161,13 +3222,12 @@ export class TeamDetail extends BaseElement {
     // mengirim ID card lebih dulu akan gagal padahal logonya ada di antrean.
     antre.sort((a, b) => (a.kind === 'logo' ? -1 : 0) - (b.kind === 'logo' ? -1 : 0));
 
-    const kode = this.$('#kode')?.value.trim() || '';
-    // Sesi tim tidak dimintai kode: sesinya sendiri lahir dari kode itu, dan
-    // GAS menerimanya sebagai ganti.
-    if (!adalahAdmin() && !bolehSuntingTim(team.team_id) && !kode) {
+    // Wewenangnya sudah dibuktikan sesi; tidak ada kode yang perlu dibaca dari
+    // layar. Kalau sesinya tidak berhak, GAS yang menolak — dan pesannya
+    // diteruskan apa adanya ke bilah pesan.
+    if (!adalahAdmin() && !bolehSuntingTim(team.team_id)) {
       batal();
-      this._pesan('Isi kode tim dulu. Kode dibagikan panitia ke PIC tiap tim.', 'galat');
-      this.$('#kode')?.focus();
+      this._pesan('Masuk dulu dengan Kode Tim tim ini untuk mengunggah berkas.', 'galat');
       return;
     }
 
@@ -3195,7 +3255,6 @@ export class TeamDetail extends BaseElement {
           endpoint: meta?.endpoint,
           teamId: team.team_id,
           playerId: item.playerId,
-          code: kode,
           token: sesiSekarang()?.token || '',
           kind: item.kind,
           file: item.file,
@@ -3252,7 +3311,6 @@ export class TeamDetail extends BaseElement {
           'perbaiki dulu, lalu tekan Simpan lagi.',
         'galat'
       );
-      this.$('#kode')?.focus();
       return;
     }
 
@@ -3298,11 +3356,6 @@ export class TeamDetail extends BaseElement {
     el.innerHTML = `${ikon}<span class="pesan-teks">${esc(teks)}</span>`;
     el.className = `pesan ${jenis}`.trim();
 
-    // Kolom kode ikut ditandai kalau memang kodenya yang bermasalah, supaya
-    // jelas di mana perbaikannya — bukan sekadar "ada yang salah".
-    const blok = this.$('.kode-blok');
-    if (blok) blok.classList.toggle('salah', jenis === 'galat' && /kode tim/i.test(teks));
-
     // Bawa ke layar: pesan di puncak daftar tidak berguna kalau pengguna sedang
     // menggulir di baris ketujuh.
     //
@@ -3326,14 +3379,13 @@ export class TeamDetail extends BaseElement {
    * membawa halaman kembali ke puncak — berpindah tim dengan posisi gulir warisan
    * tim sebelumnya membingungkan.
    */
-  _fokusAwal(fokus) {
+  _fokusAwal() {
     requestAnimationFrame(() => {
       window.scrollTo({ top: 0, behavior: 'auto' });
-      // Layar unggah membuka dengan kursor sudah di kode tim — isian pertama
-      // yang wajib. Admin tidak punya kolom itu, jadi fokus jatuh ke tombol
-      // kembali supaya keyboard tetap punya pijakan.
-      const kode = fokus === 'berkas' ? this.$('#kode') : null;
-      (kode || this.$('.kembali'))?.focus();
+      // Sejak kolom Kode Tim dihapus, tidak ada lagi isian wajib yang pantas
+      // merebut fokus di layar unggah. Fokus jatuh ke tombol kembali supaya
+      // papan ketik tetap punya pijakan yang jelas.
+      this.$('.kembali')?.focus();
     });
   }
 }

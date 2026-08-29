@@ -68,17 +68,18 @@ function toBase64(blob) {
  * Logo dikunci ke `teamId`; ID card dikunci ke `playerId` karena diunggah PER
  * ORANG. Foto boleh keduanya: dengan `playerId` berarti foto pemain, tanpa itu
  * berarti foto bersama tim. Wewenangnya boleh datang dari salah satu dari dua arah:
- *   - `code`  : Kode Tim yang dipegang PIC
- *   - `token` : sesi admin (admin tidak perlu tahu kode tiap tim)
+ *   - `token` : sesi yang sedang berjalan — admin, atau PIC tim yang sudah
+ *               masuk dengan Kode Tim-nya. Kode itu sendiri TIDAK ikut dikirim:
+ *               ia kunci login, bukan kata sandi yang ditempel tiap unggahan.
  * GAS yang memutuskan, bukan berkas ini — di sana relawan juga ditolak.
  *
- * @param {{endpoint:string, teamId?:string, playerId?:string, code?:string,
+ * @param {{endpoint:string, teamId?:string, playerId?:string,
  *          token?:string, kind:'logo'|'idcard', file:File, maxBytes:number}} opts
  * @returns {Promise<{kind:string, url:string|null}>}
  */
-export async function uploadTeamFile({ endpoint, teamId, playerId, code, token, kind, file, maxBytes }) {
+export async function uploadTeamFile({ endpoint, teamId, playerId, token, kind, file, maxBytes }) {
   if (!endpoint) throw new Error('Endpoint unggahan belum dikonfigurasi.');
-  if (!token && !(code || '').trim()) throw new Error('Kode tim wajib diisi.');
+  if (!token) throw new Error('Masuk dulu untuk mengunggah berkas.');
   if (kind === 'idcard' && !playerId) throw new Error('Pemain belum dipilih.');
 
   const { mimeType, base64, bytes } = await compressImage(file);
@@ -93,7 +94,6 @@ export async function uploadTeamFile({ endpoint, teamId, playerId, code, token, 
     body: JSON.stringify({
       teamId,
       playerId,
-      code: (code || '').trim(),
       token: token || '',
       kind,
       mimeType,
