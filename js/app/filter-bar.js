@@ -57,10 +57,16 @@ const styles = css`
     border-radius: var(--r-pill);
     font-size: var(--fs-xs);
   }
-  @media (max-width: 860px) {
+  /* Di layar sempit tinggal pencarian saja.
+     Penyaring kontingen dibuang di sini karena daftar tim sudah berubah jadi
+     kartu: menyaring lalu menggulir kartu lebih lambat daripada langsung
+     mengetik nama kontingennya di kotak pencarian — pencarian memang sudah
+     menjangkau kolom kontingen. Filter yang sempat aktif di layar lebar tetap
+     berlaku dan tetap bisa dibersihkan lewat tombol Reset, yang tidak ikut
+     disembunyikan justru supaya keadaan tersaring tidak pernah tak terlihat. */
+  @media (max-width: 900px) {
     ui-combo {
-      flex-basis: 100%;
-      max-width: none;
+      display: none;
     }
   }
   @media (max-width: 640px) {

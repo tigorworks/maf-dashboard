@@ -8,7 +8,7 @@ import { esc } from '../core/format.js';
 import { loadDataset } from '../data/source.js';
 import { derive, setAuth, setDataset, setError, setPage, store } from '../data/app-state.js';
 import { initGameRouting } from '../data/router.js';
-import { onAuth, pulihkanSesi } from '../data/auth.js';
+import { adalahAdmin, onAuth, pulihkanSesi } from '../data/auth.js';
 import './app-header.js';
 import './login-dialog.js';
 import './code-list.js';
@@ -131,7 +131,10 @@ export class AppShell extends BaseElement {
         <div class="sk-grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">
           ${'<div class="skeleton" style="height:98px"></div>'.repeat(2)}
         </div>
-        <div class="sk-grid">${'<div class="skeleton"></div>'.repeat(4)}</div>
+        ${/* Rangka kartu ringkasan hanya dipasang kalau ringkasannya memang
+              akan muncul — kalau tidak, ia menjanjikan sesuatu yang tak pernah
+              datang lalu menghilang begitu data siap. */ ''}
+        ${adalahAdmin() ? `<div class="sk-grid">${'<div class="skeleton"></div>'.repeat(4)}</div>` : ''}
         <div class="skeleton" style="height:110px"></div>
         <div class="skeleton" style="height:420px"></div>`;
       return;
@@ -174,7 +177,6 @@ export class AppShell extends BaseElement {
     // diganti — karena itu pemeriksaannya juga menengok team-detail.
     if (!main.querySelector('team-table')) {
       main.innerHTML = `
-        <stat-grid></stat-grid>
         <filter-bar></filter-bar>
         <team-table></team-table>`;
     }
@@ -182,11 +184,30 @@ export class AppShell extends BaseElement {
     const view = derive(state);
     this._view = view;
 
-    this.$('stat-grid').data = {
-      stats: view.stats,
-      total: view.totalTeams,
-      filtered: view.filtered.length !== view.totalTeams,
-    };
+    /* Ringkasan hanya untuk admin.
+       Angka-angka itu alat pemantauan panitia — berapa tim masuk, berapa yang
+       kurang — bukan informasi yang dicari peserta, sementara di ponsel ia
+       memakan hampir separuh layar pertama sebelum satu nama tim pun terlihat.
+       Ditambah/dibuang di sini, bukan sekadar disembunyikan lewat CSS, supaya
+       ia tidak ikut terkirim ke pengunjung yang tidak berhak melihatnya.
+       Masuk & keluar dijalankan tanpa memuat ulang halaman, jadi keduanya
+       ditangani: elemen dibuat saat admin masuk, dan dibuang saat ia keluar. */
+    const bolehLihatRingkasan = adalahAdmin();
+    let ringkasan = main.querySelector('stat-grid');
+    if (bolehLihatRingkasan && !ringkasan) {
+      ringkasan = document.createElement('stat-grid');
+      main.prepend(ringkasan);
+    } else if (!bolehLihatRingkasan && ringkasan) {
+      ringkasan.remove();
+      ringkasan = null;
+    }
+    if (ringkasan) {
+      ringkasan.data = {
+        stats: view.stats,
+        total: view.totalTeams,
+        filtered: view.filtered.length !== view.totalTeams,
+      };
+    }
     this.$('team-table').view = view;
   }
 

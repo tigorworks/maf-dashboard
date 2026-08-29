@@ -97,15 +97,6 @@ export function setSort(key) {
   });
 }
 
-/** Dipakai pemilih urutan di ponsel: ganti kolom, arah dipertahankan. */
-export function setSortKey(key) {
-  store.set((state) => ({ sort: { key, dir: state.sort.dir }, page: 1 }));
-}
-
-export function toggleSortDir() {
-  store.set((state) => ({ sort: { key: state.sort.key, dir: state.sort.dir === 'asc' ? 'desc' : 'asc' }, page: 1 }));
-}
-
 export function setPage(page) {
   store.set({ page });
 }
@@ -134,7 +125,11 @@ export function setTerkunci(terkunci) {
 }
 
 export function setAuth(sesi) {
-  store.set({ auth: sesi ? { nama: sesi.nama, peran: sesi.peran } : null });
+  // teamId ikut disimpan supaya komponen yang membaca store (bukan modul auth)
+  // tahu tim mana yang boleh disunting oleh sesi peran 'tim'.
+  store.set({
+    auth: sesi ? { nama: sesi.nama, peran: sesi.peran, teamId: sesi.teamId || '' } : null,
+  });
 }
 
 /**
@@ -153,6 +148,31 @@ export function applyPlayerPatch(playerId, patch) {
       return { ...team, members, idcard_count: members.filter((m) => m.has_idcard).length };
     }),
   }));
+}
+
+/**
+ * Buang satu tim dari store setelah dihapus di server.
+ *
+ * Halaman tidak dimuat ulang: daftar tim, hitungan kartu ringkasan, dan facet
+ * kontingen semuanya diturunkan dari state ini, jadi membuang satu baris di
+ * sini sudah cukup untuk membuat seluruh layar sepakat.
+ */
+export function buangTim(teamId) {
+  store.set((state) => {
+    const teams = state.teams.filter((team) => team.team_id !== teamId);
+    // Facet kontingen ikut dihitung ulang. Kalau tidak, kontingen yang timnya
+    // baru saja habis tetap tersisa di penyaring dan selalu menghasilkan nol.
+    const kontingen = [...new Set(teams.map((t) => t.kontingen).filter(Boolean))].sort((a, b) =>
+      a.localeCompare(b, 'id')
+    );
+    return {
+      teams,
+      players: state.players.filter((p) => p.team?.team_id !== teamId),
+      facets: { ...state.facets, kontingen },
+      selectedTeamId: state.selectedTeamId === teamId ? null : state.selectedTeamId,
+      page: 1,
+    };
+  });
 }
 
 /**
