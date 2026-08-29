@@ -76,27 +76,120 @@ const styles = css`
     background: var(--surface-inset);
     border-radius: var(--r-xs);
   }
-  .skeleton {
-    height: 78px;
-    background: var(--skeleton);
-    background-size: 400% 100%;
-    border: 1px solid var(--border);
-    border-radius: var(--r-md);
-    animation: shimmer 1.4s ease-in-out infinite;
-  }
-  .sk-grid {
+  /* --- Layar memuat ---
+     Rangka berkilau (shimmer) menjanjikan bentuk yang belum tentu datang, dan
+     di jaringan lambat ia diam saja selama belasan detik: tidak ada yang
+     memberi tahu apakah prosesnya masih hidup. Layar ini justru berdenyut,
+     menyebut tahapnya, dan mengakui sendiri kalau pemuatannya lama. */
+  .muat {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: var(--sp-3);
+    place-items: center;
+    gap: var(--sp-5);
+    min-height: min(60vh, 460px);
+    padding: var(--sp-6) var(--sp-4);
+    text-align: center;
   }
-  @keyframes shimmer {
+  .muat-cincin {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 132px;
+    height: 132px;
+  }
+  /* Dua cincin berputar berlawanan arah dengan kecepatan berbeda: satu cincin
+     saja terbaca seperti pemutar generik, sedangkan ini bergerak seperti nyala
+     — bentuk yang sama dengan logo di tengahnya. */
+  .muat-cincin::before,
+  .muat-cincin::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 2px solid transparent;
+  }
+  .muat-cincin::before {
+    border-top-color: var(--brand-gold, var(--accent));
+    border-right-color: color-mix(in srgb, var(--brand-orange) 70%, transparent);
+    animation: putar 1.6s linear infinite;
+  }
+  .muat-cincin::after {
+    inset: 14px;
+    border-bottom-color: var(--brand-blue-bright, var(--accent));
+    animation: putar 2.4s linear infinite reverse;
+  }
+  .muat-logo {
+    width: 74px;
+    height: 74px;
+    background-image: var(--logo-maf);
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+    animation: denyut-muat 2.2s var(--ease) infinite;
+  }
+  .muat-teks {
+    display: grid;
+    gap: 6px;
+  }
+  .muat-judul {
+    font-size: var(--fs-lg);
+    font-weight: 800;
+  }
+  .muat-nota {
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
+  }
+  /* Batang tak tentu: ia TIDAK berpura-pura tahu berapa persen selesai —
+     panjangnya tetap, hanya posisinya yang berjalan. */
+  .muat-bar {
+    position: relative;
+    width: min(280px, 70vw);
+    height: 4px;
+    background: var(--surface-2);
+    border-radius: var(--r-pill);
+    overflow: hidden;
+  }
+  .muat-bar::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 40%;
+    background: linear-gradient(90deg, transparent, var(--brand-gold, var(--accent)), transparent);
+    animation: geser 1.5s var(--ease) infinite;
+  }
+  @keyframes putar {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  @keyframes denyut-muat {
+    50% {
+      opacity: 0.55;
+      transform: scale(0.94);
+    }
+  }
+  @keyframes geser {
     0% {
-      background-position: 100% 0;
+      left: -40%;
     }
     100% {
-      background-position: 0 0;
+      left: 100%;
     }
   }
+  /* Yang meminta gerakan dikurangi tetap mendapat kabar, tanpa animasi. */
+  @media (prefers-reduced-motion: reduce) {
+    .muat-cincin::before,
+    .muat-cincin::after,
+    .muat-logo,
+    .muat-bar::after {
+      animation: none;
+    }
+    .muat-cincin::before {
+      border-color: var(--brand-gold, var(--accent));
+      opacity: 0.5;
+    }
+  }
+
   @media (max-width: 900px) {
     main {
       gap: var(--sp-3);
@@ -127,16 +220,19 @@ export class AppShell extends BaseElement {
     const main = this.$('main');
 
     if (state.phase === 'loading') {
+      const kabar = this._kabarMuat();
       main.innerHTML = `
-        <div class="sk-grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">
-          ${'<div class="skeleton" style="height:98px"></div>'.repeat(2)}
-        </div>
-        ${/* Rangka kartu ringkasan hanya dipasang kalau ringkasannya memang
-              akan muncul — kalau tidak, ia menjanjikan sesuatu yang tak pernah
-              datang lalu menghilang begitu data siap. */ ''}
-        ${adalahAdmin() ? `<div class="sk-grid">${'<div class="skeleton"></div>'.repeat(4)}</div>` : ''}
-        <div class="skeleton" style="height:110px"></div>
-        <div class="skeleton" style="height:420px"></div>`;
+        <div class="muat" role="status" aria-live="polite">
+          <div class="muat-cincin" aria-hidden="true">
+            <div class="muat-logo"></div>
+          </div>
+          <div class="muat-teks">
+            <span class="muat-judul">${esc(kabar.judul)}</span>
+            <span class="muat-nota">${esc(kabar.nota)}</span>
+          </div>
+          <div class="muat-bar" aria-hidden="true"></div>
+        </div>`;
+      this._jalankanJamMuat();
       return;
     }
 
@@ -209,6 +305,48 @@ export class AppShell extends BaseElement {
       };
     }
     this.$('team-table').view = view;
+  }
+
+  /**
+   * Kabar yang berubah seiring waktu tunggu.
+   *
+   * Bukan hiasan: pemuatan pertama setelah cache GAS kedaluwarsa memang bisa
+   * memakan delapan detik atau lebih, dan layar yang mengucapkan kalimat sama
+   * selama itu terbaca seperti macet. Menyebut apa yang sedang terjadi — lalu
+   * mengakui kalau memang lama — lebih jujur daripada memutar animasi tanpa
+   * kata.
+   */
+  _kabarMuat() {
+    const detik = this._detikMuat || 0;
+    if (detik < 3) {
+      return { judul: 'Menghubungi server…', nota: 'Mengambil data peserta e-sport MAF 2026.' };
+    }
+    if (detik < 8) {
+      return { judul: 'Menyiapkan data…', nota: 'Menyusun daftar tim dan roster pemain.' };
+    }
+    return {
+      judul: 'Masih memuat…',
+      nota: 'Pemuatan pertama memang paling lama karena seluruh data dibaca ulang. Mohon tunggu.',
+    };
+  }
+
+  /**
+   * Penghitung detik selama memuat. Dinyalakan sekali, dan mati sendiri begitu
+   * fasenya bukan 'loading' lagi — termasuk saat pemuatannya gagal.
+   */
+  _jalankanJamMuat() {
+    if (this._jamMuat) return;
+    this._detikMuat = 0;
+    this._jamMuat = setInterval(() => {
+      if (store.state.phase !== 'loading') {
+        clearInterval(this._jamMuat);
+        this._jamMuat = 0;
+        return;
+      }
+      this._detikMuat += 1;
+      // Hanya dirender ulang saat kabarnya benar-benar berganti.
+      if (this._detikMuat === 3 || this._detikMuat === 8) this.requestRender();
+    }, 1000);
   }
 
   async onMount() {
