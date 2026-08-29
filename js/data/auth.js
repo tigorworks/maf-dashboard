@@ -18,7 +18,7 @@ const COOKIE = 'maf_sesi';
 const IDLE_MS = 3 * 60 * 60 * 1000; // samakan dengan CONFIG.SESI_IDLE_MS di Code.gs
 const TIMEOUT = 25000;
 
-export const PERAN = { ADMIN: 'admin', RELAWAN: 'relawan' };
+export const PERAN = { ADMIN: 'admin', RELAWAN: 'relawan', TIM: 'tim' };
 
 /* ------------------------------ cookie ------------------------------ */
 
@@ -98,13 +98,46 @@ export function adalahRelawan() {
   return sesi?.peran === PERAN.RELAWAN;
 }
 
-/** Admin maupun relawan sama-sama boleh melihat ID card. */
-export function bolehLihatIdCard() {
-  return Boolean(sesi);
+/** PIC tim: masuk dengan Kode Tim, wewenangnya terbatas pada satu tim. */
+export function adalahTim() {
+  return sesi?.peran === PERAN.TIM;
+}
+
+/**
+ * Bolehkah sesi ini menyunting tim tertentu?
+ *
+ * Admin: semua tim. PIC tim: timnya sendiri. Selain itu: tidak.
+ * Ini pertanyaan TAMPILAN — jawabannya menentukan tombol mana yang muncul.
+ * Penolakan yang sesungguhnya tetap terjadi di GAS.
+ */
+export function bolehSuntingTim(teamId) {
+  if (adalahAdmin()) return true;
+  return adalahTim() && Boolean(teamId) && sesi?.teamId === teamId;
+}
+
+/**
+ * Admin dan relawan boleh melihat ID card tim mana pun; PIC tim hanya timnya
+ * sendiri. GAS menolak sisanya, jadi meminta gambar tim lain hanya akan
+ * menghasilkan kotak galat — lebih baik tidak diminta sama sekali.
+ */
+export function bolehLihatIdCard(teamId) {
+  if (!sesi) return false;
+  if (!adalahTim()) return true;
+  return Boolean(teamId) && sesi.teamId === teamId;
 }
 
 function pasangSesi(data, token) {
-  sesi = { nama: data.nama, peran: data.peran, token, sampai: Date.now() + IDLE_MS };
+  // teamId hanya terisi untuk peran tim. Ia datang dari GAS, bukan dari apa pun
+  // yang bisa disetel di browser — di sini ia sekadar dibawa agar tampilan tahu
+  // tim mana yang boleh disunting. Wewenang sesungguhnya tetap diperiksa ulang
+  // di GAS pada setiap permintaan.
+  sesi = {
+    nama: data.nama,
+    peran: data.peran,
+    teamId: data.teamId || '',
+    token,
+    sampai: Date.now() + IDLE_MS,
+  };
   tulisCookie(token);
   jadwalkanKedaluwarsa();
   umumkan();
@@ -226,12 +259,31 @@ export async function ambilKodeTim({ game = '', teamId = '' } = {}) {
 }
 
 /**
+ * Buat Kode Tim baru yang berlaku terbatas. HANYA admin — GAS menegakkannya.
+ * Membuat ulang MENGGANTI kode sebelumnya: satu tim selalu punya paling banyak
+ * satu kode hidup.
+ */
+export async function buatKodeTim(teamId) {
+  const hasil = await kirimTerautentikasi({ action: 'buatKode', teamId });
+  return { kode: hasil.kode || '', sampai: Number(hasil.sampai || 0) };
+}
+
+/**
  * Kunci / buka kunci roster satu cabor. HANYA admin — GAS yang menegakkannya.
  * Efeknya: Kode Tim berhenti berlaku untuk mengunggah. Admin tidak terpengaruh.
  */
 export async function aturKunciRoster(game, kunci) {
   const hasil = await kirimTerautentikasi({ action: 'lockRoster', game, kunci });
   return hasil.terkunciSemua || {};
+}
+
+/**
+ * Hapus satu tim beserta berkasnya. HANYA admin — GAS yang menegakkannya.
+ * Nama tim dikirim ulang sebagai konfirmasi dan dicocokkan di server; tanpa itu
+ * satu klik yang salah sasaran cukup untuk menghapus tim yang keliru.
+ */
+export async function hapusTim(teamId, konfirmasi) {
+  return kirimTerautentikasi({ action: 'hapusTim', teamId, konfirmasi });
 }
 
 export async function simpanRoster(teamId, roster) {

@@ -96,3 +96,23 @@ export function compare(a, b) {
   return String(a).localeCompare(String(b), 'id', { sensitivity: 'base', numeric: true });
 }
 
+
+/**
+ * Sisa waktu sampai `sampai` (epoch ms) dalam bentuk singkat: "5j 12m".
+ * Mengembalikan '' kalau sudah lewat — pemanggilnya yang memutuskan kata apa
+ * yang dipakai untuk keadaan itu, karena "kedaluwarsa" dan "habis" tidak selalu
+ * kalimat yang tepat.
+ */
+export function sisaWaktu(sampai) {
+  const selisih = Number(sampai || 0) - Date.now();
+  if (selisih <= 0) return '';
+  const menit = Math.floor(selisih / 60000);
+  const jam = Math.floor(menit / 60);
+  return jam ? `${jam}j ${menit % 60}m` : `${menit}m`;
+}
+
+/** Jam:menit lokal dari epoch ms, untuk menyebut kapan sesuatu berakhir. */
+export function jamMenit(epoch) {
+  if (!epoch) return '';
+  return new Date(Number(epoch)).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+}

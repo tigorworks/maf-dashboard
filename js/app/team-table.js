@@ -8,10 +8,10 @@
 import { BaseElement, define } from '../core/element.js';
 import { css } from '../core/css.js';
 import { esc, formatDate, highlight, hueOf, initials, num } from '../core/format.js';
-import { COLUMNS, matchedMembers, selectTeam, setSort, setSortKey, store, toggleSortDir } from '../data/app-state.js';
+import { buangTim, COLUMNS, matchedMembers, selectTeam, setSort, store } from '../data/app-state.js';
+import { adalahAdmin, hapusTim } from '../data/auth.js';
 import { periksaTim } from '../data/rules.js';
 import '../ui/ui-pagination.js';
-import '../ui/ui-combo.js';
 
 const styles = css`
   :host {
@@ -39,7 +39,6 @@ const styles = css`
     opacity: 0.055;
   }
   /* Isi panel harus berada di atas watermark. */
-  .mobile-sort,
   .scroll,
   ui-pagination {
     position: relative;
@@ -379,54 +378,100 @@ const styles = css`
     color: var(--text-faint);
   }
 
-  /* Toolbar sort khusus ponsel: header tabel disembunyikan di mode kartu,
-     jadi pengurutan harus tetap punya jalan masuk. */
-  .mobile-sort {
-    display: none;
-    align-items: center;
-    gap: var(--sp-2);
-    padding: var(--sp-3);
-    border-bottom: 1px solid var(--border);
+  .menu button.bahaya {
+    color: var(--peringatan);
+    border-top: 1px solid var(--border);
   }
-  .mobile-sort span {
-    font-size: var(--fs-xs);
-    font-weight: 700;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    color: var(--text-faint);
-  }
-  .mobile-sort ui-combo {
-    flex: 1;
-    min-width: 0;
-  }
-  .dir {
+
+  /* --- Konfirmasi hapus tim ---
+     Lapisan penuh, bukan sekadar baris di dalam menu: menghapus tim membuang
+     rosternya sekaligus seluruh berkas yang sudah dikumpulkan, dan tidak ada
+     layar mana pun yang bisa mengembalikannya. */
+  .hapus-lapis {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
     display: grid;
     place-items: center;
-    flex: none;
-    width: 42px;
-    height: 42px;
+    padding: var(--sp-4);
+    background: rgba(4, 8, 20, 0.72);
+    backdrop-filter: blur(3px);
+  }
+  .hapus-kotak {
+    width: min(440px, 100%);
+    padding: var(--sp-5);
+    background: var(--surface);
+    border: 1px solid var(--peringatan);
+    border-radius: var(--r-md);
+  }
+  .hapus-kotak h3 {
+    margin: 0 0 var(--sp-2);
+    font-size: var(--fs-lg);
+    color: var(--peringatan);
+  }
+  .hapus-kotak p {
+    margin: 0 0 var(--sp-3);
+    font-size: var(--fs-sm);
+    line-height: 1.5;
     color: var(--text-muted);
-    background: var(--surface-2);
+  }
+  .hapus-kotak b {
+    color: var(--text);
+  }
+  .hapus-kotak input {
+    width: 100%;
+    height: 42px;
+    margin-bottom: var(--sp-3);
+    padding: 0 var(--sp-3);
+    font: inherit;
+    color: var(--text);
+    background: var(--surface-inset);
     border: 1px solid var(--border);
     border-radius: var(--r-sm);
   }
-  .dir svg {
-    width: 16px;
-    height: 16px;
-    transition: transform var(--dur) var(--ease);
+  .hapus-aksi {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--sp-2);
   }
-  .dir[data-dir='desc'] svg {
-    transform: rotate(180deg);
+  .hapus-aksi button {
+    height: 40px;
+    padding: 0 var(--sp-4);
+    font-size: var(--fs-sm);
+    font-weight: 700;
+    color: var(--text-muted);
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
   }
+  .hapus-aksi button.bahaya {
+    color: #fff;
+    background: var(--peringatan);
+    border-color: var(--peringatan);
+  }
+  .hapus-aksi button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .hapus-galat {
+    margin: 0 0 var(--sp-3);
+    font-size: var(--fs-sm);
+    color: var(--peringatan);
+  }
+
+  /* Di mode kartu TIDAK ada pemilih urutan.
+     Dulu ada toolbar "Urutkan" berisi dropdown + tombol arah, karena header
+     tabel disembunyikan di layar sempit. Toolbar itu dibuang: panelnya tembus
+     pandang di atas kartu dan sentuhan sering tembus ke baris di belakangnya,
+     sehingga memilih urutan malah membuka detail tim. Di ponsel orang mencari
+     satu tim lewat kotak pencarian, bukan mengurutkan 98 baris — jadi urutan
+     bawaan sudah memadai dan pengurutan tetap utuh di layar lebar. */
 
   /* --- Mode kartu untuk layar sempit --- */
   @media (max-width: 900px) {
     .scroll {
       max-height: none;
       overflow: visible;
-    }
-    .mobile-sort {
-      display: flex;
     }
     thead {
       display: none;
@@ -526,9 +571,6 @@ const styles = css`
       margin-inline: var(--sp-2);
       padding: var(--sp-2) var(--sp-3);
     }
-    .mobile-sort {
-      padding: var(--sp-2);
-    }
   }
 `;
 
@@ -544,6 +586,8 @@ export class TeamTable extends BaseElement {
     super();
     this._view = null;
     this._menuTeam = null;
+    // { teamId, nama, ketik, sibuk, galat } saat konfirmasi hapus terbuka.
+    this._hapus = null;
   }
 
   /** Hasil derive() dari app-state. */
@@ -559,21 +603,8 @@ export class TeamTable extends BaseElement {
     // Relawan tidak berwenang mengunggah — GAS menolaknya. Menyisakan menunya
     // hanya menuntun mereka ke layar yang berujung penolakan.
     const bolehUnggah = auth?.peran !== 'relawan';
-    const sortableColumns = COLUMNS.filter((column) => column.sortable);
 
     this.shadowRoot.innerHTML = `
-      <div class="mobile-sort">
-        <span>Urutkan</span>
-        <ui-combo id="sort" required label="Urutkan menurut" placeholder="Tim"
-                  value="${esc(sort.key)}"></ui-combo>
-        <button class="dir" type="button" data-dir="${esc(sort.dir)}"
-                aria-label="Arah urutan: ${sort.dir === 'asc' ? 'menaik' : 'menurun'}">
-          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <path d="M8 13V3m0 0L4.4 6.6M8 3l3.6 3.6" stroke="currentColor" stroke-width="1.7"
-                  stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-        </button>
-      </div>
       <div class="scroll">
         <table>
           <thead>
@@ -637,9 +668,23 @@ export class TeamTable extends BaseElement {
                </button>`
             : ''
         }
-      </div>`;
+        ${
+          /* Hapus dipisah garis dan diberi warna peringatan: ia bertetangga
+             dengan aksi sehari-hari di menu yang sama, dan satu-satunya di sini
+             yang tidak bisa dibatalkan. */
+          adalahAdmin()
+            ? `<button type="button" role="menuitem" class="bahaya" data-act="hapus">
+                 <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                   <path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8a1 1 0 0 0 1 .9h3.8a1 1 0 0 0 1-.9l.6-8"
+                         stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+                 </svg>
+                 Hapus tim
+               </button>`
+            : ''
+        }
+      </div>
+      ${this._kotakHapus()}`;
 
-    this.$('#sort').options = sortableColumns.map((column) => ({ value: column.key, label: column.label }));
     // render() mengganti seluruh innerHTML, jadi menu yang sedang terbuka ikut
     // terbuang — status internalnya harus ikut disetel ulang.
     this._menuTeam = null;
@@ -717,16 +762,101 @@ export class TeamTable extends BaseElement {
       </tr>`;
   }
 
+  /**
+   * Konfirmasi hapus tim. Nama timnya harus DIKETIK ULANG, bukan sekadar
+   * ditekan "Ya": menu ⋮ dibuka dari baris mana pun yang kebetulan di bawah
+   * jari, dan penghapusan ini membuang roster beserta seluruh berkas yang sudah
+   * dikumpulkan. GAS mencocokkan nama itu sekali lagi di sisinya.
+   */
+  _kotakHapus() {
+    const h = this._hapus;
+    if (!h) return '';
+    const cocok = h.ketik.trim().toLowerCase() === h.nama.trim().toLowerCase();
+    return `
+      <div class="hapus-lapis" role="dialog" aria-modal="true" aria-label="Hapus tim ${esc(h.nama)}">
+        <div class="hapus-kotak">
+          <h3>Hapus tim ini?</h3>
+          <p>
+            <b>${esc(h.nama)}</b> akan dibuang dari daftar beserta seluruh berkasnya —
+            logo, ID card, dan foto. Berkasnya masuk sampah Drive (tertahan 30 hari);
+            barisnya sendiri tidak bisa dikembalikan.
+          </p>
+          <p>Ketik nama timnya untuk melanjutkan:</p>
+          ${h.galat ? `<p class="hapus-galat">${esc(h.galat)}</p>` : ''}
+          <input id="ketik-hapus" type="text" autocomplete="off" spellcheck="false"
+                 placeholder="${esc(h.nama)}" value="${esc(h.ketik)}"
+                 ${h.sibuk ? 'disabled' : ''} />
+          <div class="hapus-aksi">
+            <button type="button" data-act="batal-hapus" ${h.sibuk ? 'disabled' : ''}>Batal</button>
+            <button type="button" class="bahaya" data-act="ya-hapus"
+                    ${cocok && !h.sibuk ? '' : 'disabled'}>
+              ${h.sibuk ? 'Menghapus…' : 'Hapus tim'}
+            </button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  async _jalankanHapus() {
+    const h = this._hapus;
+    if (!h || h.sibuk) return;
+    this._hapus = { ...h, sibuk: true, galat: '' };
+    this.render();
+    try {
+      await hapusTim(h.teamId, h.ketik.trim());
+      // Dibuang dari store, bukan dengan memuat ulang seluruh data: satu baris
+      // hilang tidak sepadan dengan pembacaan ulang seluruh spreadsheet.
+      buangTim(h.teamId);
+      this._hapus = null;
+      this.render();
+    } catch (error) {
+      this._hapus = { ...h, sibuk: false, galat: error.message || 'Gagal menghapus tim.' };
+      this.render();
+    }
+  }
+
   onMount() {
     this.listen(this.shadowRoot, 'click', (event) => {
+      // Lapisan konfirmasi diperiksa PALING awal: ia menutupi tabel, dan
+      // klik apa pun di dalamnya tidak boleh merembes jadi "buka tim".
+      if (this._hapus) {
+        if (event.target.closest('[data-act="batal-hapus"]')) {
+          this._hapus = null;
+          this.render();
+          return;
+        }
+        if (event.target.closest('[data-act="ya-hapus"]')) {
+          this._jalankanHapus();
+          return;
+        }
+        if (event.target.closest('.hapus-kotak')) return;
+        // Klik di luar kotak = batal.
+        if (event.target.closest('.hapus-lapis')) {
+          this._hapus = null;
+          this.render();
+          return;
+        }
+      }
       // Menu dan tombolnya diperiksa lebih dulu: keduanya berada di dalam baris,
       // jadi tanpa ini klik pada menu akan ikut membuka panel detail.
       const aksi = event.target.closest('.menu button[data-act]');
       if (aksi) {
         const teamId = this._menuTeam;
         this._tutupMenu();
+        if (!teamId) return;
+
+        if (aksi.dataset.act === 'hapus') {
+          const tim = store.state.teams.find((t) => t.team_id === teamId);
+          if (tim) {
+            this._hapus = { teamId, nama: tim.team_name, ketik: '', sibuk: false, galat: '' };
+            this.render();
+            this.$('#ketik-hapus')?.focus();
+          }
+          return;
+        }
+
         const tujuan = { unggah: 'berkas', foto: 'foto' }[aksi.dataset.act] || null;
-        if (teamId) selectTeam(teamId, tujuan);
+        selectTeam(teamId, tujuan);
         return;
       }
       const burger = event.target.closest('.burger');
@@ -737,10 +867,6 @@ export class TeamTable extends BaseElement {
       }
       this._tutupMenu();
 
-      if (event.target.closest('.dir')) {
-        toggleSortDir();
-        return;
-      }
       const header = event.target.closest('th[data-sort]');
       if (header) {
         setSort(header.dataset.sort);
@@ -761,11 +887,30 @@ export class TeamTable extends BaseElement {
     this.listen(window, 'scroll', () => this._tutupMenu(), true);
     this.listen(window, 'resize', () => this._tutupMenu());
 
-    this.listen(this.shadowRoot, 'change', (event) => {
-      if (event.target.id === 'sort') setSortKey(event.detail.value);
+    // Ketikan nama tim dicatat TANPA render ulang — render akan membuang fokus
+    // di tengah orang mengetik. Yang perlu ikut berubah hanyalah tombolnya.
+    this.listen(this.shadowRoot, 'input', (event) => {
+      if (event.target.id !== 'ketik-hapus' || !this._hapus) return;
+      this._hapus.ketik = event.target.value;
+      const cocok = this._hapus.ketik.trim().toLowerCase() === this._hapus.nama.trim().toLowerCase();
+      const tombol = this.$('[data-act="ya-hapus"]');
+      if (tombol) tombol.disabled = !cocok;
     });
 
     this.listen(this.shadowRoot, 'keydown', (event) => {
+      if (this._hapus) {
+        if (event.key === 'Escape' && !this._hapus.sibuk) {
+          this._hapus = null;
+          this.render();
+        }
+        // Enter di kolom ketik = tekan tombol hapusnya, kalau namanya sudah cocok.
+        if (event.key === 'Enter' && event.target.id === 'ketik-hapus') {
+          event.preventDefault();
+          const cocok = this._hapus.ketik.trim().toLowerCase() === this._hapus.nama.trim().toLowerCase();
+          if (cocok) this._jalankanHapus();
+        }
+        return;
+      }
       if (event.key === 'Escape' && this._menuTeam) {
         const tombol = this.$(`.burger[data-menu="${CSS.escape(this._menuTeam)}"]`);
         this._tutupMenu();

@@ -13,14 +13,15 @@
  */
 import { BaseElement, define } from '../core/element.js';
 import { css } from '../core/css.js';
-import { esc, formatDate, hueOf, initials, num, year } from '../core/format.js';
+import { esc, formatDate, hueOf, initials, jamMenit, num, sisaWaktu, year } from '../core/format.js';
 import { GAME_META } from '../data/source.js';
 import {
   applyPlayerPatch, applyUpload, caborTerkunci, gantiRoster, selectTeam, store,
 } from '../data/app-state.js';
 import { ACCEPTED_TYPES, uploadTeamFile } from '../data/upload.js';
 import {
-  adalahAdmin, adalahRelawan, ambilIdCard, ambilKodeTim, onAuth, sesiSekarang, simpanRoster,
+  adalahAdmin, adalahRelawan, adalahTim, ambilIdCard, ambilKodeTim, bolehLihatIdCard,
+  bolehSuntingTim, buatKodeTim, onAuth, sesiSekarang, simpanRoster,
 } from '../data/auth.js';
 import { periksaTim } from '../data/rules.js';
 
@@ -120,6 +121,27 @@ const styles = css`
 
   /* Bilah simpan: menempel di dasar layar selama mode ubah, supaya tombolnya
      tetap terjangkau saat roster panjang digulir. */
+  .putar {
+    flex: none;
+    width: 15px;
+    height: 15px;
+    margin-top: 1px;
+    border: 2px solid color-mix(in srgb, currentColor 28%, transparent);
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: berputar 0.7s linear infinite;
+  }
+  @keyframes berputar {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  /* Hormati pengguna yang mematikan animasi: penandanya tetap ada, hanya diam. */
+  @media (prefers-reduced-motion: reduce) {
+    .putar {
+      animation: none;
+    }
+  }
   .bilah-simpan {
     position: sticky;
     bottom: 0;
@@ -131,6 +153,9 @@ const styles = css`
     background: var(--header-bg);
     backdrop-filter: blur(14px);
     border-top: 1px solid var(--border-strong);
+  }
+  .bilah-simpan.mengirim {
+    border-top-color: var(--accent);
   }
   .bilah-ket {
     flex: 1;
@@ -486,6 +511,21 @@ const styles = css`
     font-size: var(--fs-xs);
     color: var(--text-faint);
   }
+  .kode-buat {
+    margin-top: var(--sp-2);
+    height: 32px;
+    padding: 0 var(--sp-3);
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    color: var(--accent);
+    background: none;
+    border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+    border-radius: var(--r-sm);
+  }
+  .kode-buat:disabled {
+    opacity: 0.55;
+    cursor: progress;
+  }
   .pj-kosong {
     margin: 0;
     padding: 7px 0;
@@ -802,11 +842,6 @@ const styles = css`
     height: 100%;
     object-fit: cover;
   }
-  .logo-thumb img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
 
   .tanda-kecil {
     flex: none;
@@ -862,6 +897,17 @@ const styles = css`
     padding: 0 var(--sp-4);
   }
 
+  /* Penanda status per baris. Warna mengikuti maknanya, bukan sekadar teks. */
+  .tanda-kecil.dipilih {
+    color: var(--accent);
+  }
+  .tanda-kecil.sedang {
+    color: var(--brand-gold);
+  }
+  .tanda-kecil.gagal {
+    color: var(--peringatan);
+  }
+
   @media (max-width: 720px) {
     .unggah-bar {
       grid-template-columns: 1fr;
@@ -870,34 +916,16 @@ const styles = css`
     .kode-blok input {
       max-width: none;
     }
-    /* Pratinjau berkas yang baru dipilih, tepat di barisnya. */
-  .pratinjau-baris {
-    display: grid;
-    place-items: center;
-    flex: none;
-    width: 52px;
-    height: 34px;
-    background: var(--surface);
-    border: 1px solid var(--accent);
-    border-radius: var(--r-xs);
-    overflow: hidden;
-  }
-  .pratinjau-baris.gagal {
-    border-color: var(--peringatan);
-  }
-  .pratinjau-baris img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-  .logo-thumb img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  .tanda-kecil {
+    /* Di baris sesempit ini "SUDAH/BELUM" mengalah demi nama pemain — status
+       diamnya sudah terbaca dari warna barisnya. Yang sedang BERGERAK tetap
+       tampil: justru saat itulah orang menunggu kabar. */
+    .tanda-kecil {
       display: none;
+    }
+    .tanda-kecil.dipilih,
+    .tanda-kecil.sedang,
+    .tanda-kecil.gagal {
+      display: inline;
     }
   }
 
@@ -1090,12 +1118,20 @@ const styles = css`
   .idcard-gambar:hover {
     border-color: var(--accent);
   }
+  /* Kotak POTRET, dan isinya 'contain' — bukan 'cover'.
+     ID card pegawai hampir selalu potret, sedangkan kotak lebar-pendek
+     sebelumnya memotongnya jadi pita setinggi 118 px yang praktis hanya memuat
+     wajah: nama, NIP, dan unit kerja — justru yang perlu dicocokkan — terpotong
+     habis, sehingga tiap kartu harus diklik satu per satu.
+     'contain' dipilih daripada 'cover' supaya kartu yang terlanjur diunggah
+     mendatar tetap terlihat utuh, hanya dengan pita kosong di kiri-kanannya. */
   .idcard-gambar img {
     display: block;
     width: 100%;
-    height: 118px;
-    object-fit: cover;
-    object-position: center;
+    aspect-ratio: 3 / 4;
+    max-height: 300px;
+    object-fit: contain;
+    background: var(--surface-inset);
   }
   .idcard-kosong {
     display: grid;
@@ -1113,7 +1149,15 @@ const styles = css`
     );
     border-radius: var(--r-sm);
   }
+  /* Saat memuat, ruangnya sudah dipesan seukuran gambar yang akan datang —
+     tanpa ini kartu melonjak tinggi begitu pratinjaunya tiba, dan daftar yang
+     sedang dibaca ikut melompat. Keadaan "Belum diunggah" sengaja TIDAK ikut
+     dibuat setinggi itu: sebagian besar pemain belum mengunggah, dan ratusan
+     kotak potret kosong hanya memanjangkan halaman tanpa isi. */
   .idcard-kosong.memuat {
+    height: auto;
+    aspect-ratio: 3 / 4;
+    max-height: 300px;
     animation: kedip 1.1s ease-in-out infinite;
   }
   @keyframes kedip {
@@ -1237,6 +1281,21 @@ const styles = css`
     color: #45c47a;
   }
 
+  /* Keterangan singkat kenapa sebagian field tidak bisa disentuh. */
+  .sunting-nota {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+  .sunting input[readonly],
+  .sunting select:disabled {
+    color: var(--text-muted);
+    background: var(--surface-inset);
+    border-color: transparent;
+    cursor: not-allowed;
+  }
   .tambah-pemain {
     display: flex;
     align-items: center;
@@ -1422,8 +1481,56 @@ const styles = css`
     .roster ol {
       grid-template-columns: 1fr;
     }
+    /* Pratinjau ID card berhenti jadi tombol.
+       Kartunya kini tampil utuh dalam bentuk potret, jadi memperbesar tidak
+       lagi diperlukan — sementara di layar sentuh ia justru mudah tertekan
+       tanpa sengaja saat menggulir roster, dan yang terbuka adalah lapisan
+       penuh layar yang harus ditutup lagi. */
+    .idcard-gambar {
+      pointer-events: none;
+    }
+    .idcard-gambar:hover {
+      border-color: var(--border);
+    }
     .lihat-idcard header {
       padding: var(--sp-4);
+    }
+
+    /* Pita penanggung jawab dipadatkan. Di layar lebar ia satu baris di samping
+       roster; begitu ketiga kelompoknya menumpuk, ia memakan hampir satu layar
+       penuh sebelum pemain pertama terlihat — padahal roster itulah yang dicari
+       orang saat membuka sebuah tim. Yang dibuang hanya ruang dan hiasan, bukan
+       satu pun nama atau peran. */
+    .pj {
+      gap: var(--sp-3);
+      padding-top: var(--sp-3);
+      padding-bottom: var(--sp-3);
+    }
+    .pj-grup h3 {
+      margin-bottom: 2px;
+    }
+    /* Monogram tidak menambah apa pun: namanya tercetak utuh tepat di sebelahnya.
+       Di layar sempit ia justru memakan lebar yang dibutuhkan nama panjang. */
+    .pj-ava {
+      display: none;
+    }
+    .pj-orang {
+      gap: 0;
+    }
+    .pj-daftar {
+      gap: 2px var(--sp-4);
+    }
+    .pj-teks {
+      font-size: var(--fs-sm);
+    }
+    /* Peran jadi sufiks sebaris — menghemat satu baris penuh per orang. */
+    .pj-teks small {
+      display: inline;
+      margin: 0 0 0 6px;
+    }
+    .pj-kosong {
+      padding: 2px 0;
+      font-size: var(--fs-xs);
     }
   }
   @media (max-width: 460px) {
@@ -1456,6 +1563,11 @@ const IKON_CEK = `<svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
   <path d="m5.2 8.2 1.9 1.9 3.7-4" stroke="currentColor" stroke-width="1.7"
         stroke-linecap="round" stroke-linejoin="round" />
 </svg>`;
+
+/* Penanda "sedang berjalan". Berputar, BUKAN batang kemajuan: menyimpan roster
+   adalah satu permintaan tunggal — batang yang merayap sendiri hanya mengarang
+   kemajuan yang tidak diketahui siapa pun, termasuk oleh halaman ini. */
+const IKON_SIBUK = '<span class="putar" aria-hidden="true"></span>';
 
 /**
  * Galat yang berlaku untuk SELURUH antrean, bukan untuk satu berkas.
@@ -1519,7 +1631,8 @@ export class TeamDetail extends BaseElement {
     this._roster = null;
     this._lihat = null; // { playerId, nama, dataUrl, memuat, galat }
     this._mode = 'lihat'; // 'lihat' (verifikasi) | 'berkas' (logo & ID card) | 'foto'
-    this._kodeTim = null; // { memuat } | { kode } | { galat } — khusus admin
+    this._kodeTim = null; // { memuat } | { kode, sampai } | { galat } — khusus admin
+    this._kodeSibuk = false;
     this._idcard = {}; // cache pratinjau per playerId
     // Pratinjau LOKAL berkas yang baru dipilih, sebelum/selagi dikirim.
     // Dikunci per sasaran (teamId untuk logo & foto tim, playerId untuk sisanya)
@@ -1545,6 +1658,11 @@ export class TeamDetail extends BaseElement {
     // GAS: menyalakan tombol lewat DevTools tidak memberi hak apa pun.
     const sesi = sesiSekarang();
     const admin = adalahAdmin();
+    // PIC tim: boleh menyunting, tapi hanya timnya sendiri dan hanya sebagian.
+    const timSendiri = adalahTim() && bolehSuntingTim(team.team_id);
+    const bolehUbah = admin || timSendiri;
+    // ID card tim lain tidak akan dikirim GAS, jadi jangan diminta sama sekali.
+    const bolehIdCard = bolehLihatIdCard(team.team_id);
     // Dua mode yang sengaja dipisah. "Lihat tim" adalah layar VERIFIKASI: tidak
     // ada satu pun field unggahan di sana, supaya tidak ada yang salah tekan
     // sambil membaca data. "Unggah berkas" adalah layar KERJA BERKAS.
@@ -1553,6 +1671,9 @@ export class TeamDetail extends BaseElement {
     // diketik tangan tidak boleh menjatuhkan mereka ke layar yang tak berguna.
     const unggah = this._mode === 'berkas' && !adalahRelawan();
     const foto = this._mode === 'foto' && !adalahRelawan();
+    // Berkas yang sudah dipilih tapi belum terkirim. Angkanya dipakai bilah
+    // simpan di mode ubah, supaya satu tombol Simpan mengurus keduanya.
+    const antreBerkas = Object.keys(this._pilihan).length;
 
     this.shadowRoot.innerHTML = `
       <section class="panel ${unggah || foto ? 'mode-unggah' : 'mode-lihat'}${this._menyimpan ? ' menyimpan' : ''}"
@@ -1583,7 +1704,7 @@ export class TeamDetail extends BaseElement {
             ${game.logo ? `<img src="${esc(game.logo)}" alt="" />` : ''}${esc(game.label)}
           </span>
           ${
-            admin && !unggah && !foto
+            bolehUbah && !unggah && !foto
               ? this._sunting
                 ? '<span class="mode-tag sunting">Mode ubah</span>'
                 : `<button class="ubah" type="button" data-act="mulai-sunting">
@@ -1597,33 +1718,37 @@ export class TeamDetail extends BaseElement {
           ${this._pitaAturan(team)}
           ${
             foto
-              ? this._bagianFoto(team, members, admin)
+              ? this._bagianFoto(team, members, admin, timSendiri)
               : unggah
-              ? this._bagianUnggah(team, members, sudahIdCard, admin)
+              ? this._bagianUnggah(team, members, sudahIdCard, admin, timSendiri)
               : `
           ${this._pitaPic(team, pic)}
 
           <section class="roster">
-            <div class="roster-head">
-              <h3>Roster</h3>
-              <span class="count">${num(members.length)} pemain</span>
-              ${
-                sesi
-                  ? `<span class="count">· ID card ${num(sudahIdCard)}/${num(members.length)}</span>`
-                  : ''
-              }
-            </div>
+            ${
+              /* Judul "Roster" dan hitungan pemainnya dibuang: kartu pemain
+                 bernomor 1..n tepat di bawahnya sudah mengatakan keduanya.
+                 Yang tersisa hanya hitungan ID card, dan hanya untuk sesi yang
+                 sudah masuk — itu angka kerja verifikasi, bukan label. */
+              bolehIdCard
+                ? `<div class="roster-head">
+                     <span class="count">ID card ${num(sudahIdCard)}/${num(members.length)}</span>
+                   </div>`
+                : ''
+            }
             ${this._bilahPesan()}
             <ol>
               ${
-                admin && this._sunting
+                bolehUbah && this._sunting
                   ? this._roster.map((baris, i) => this._formSunting(baris, i + 1)).join('')
-                  : members.map((member, index) => this._card(member, index + 1, { sesi, admin })).join('')
+                  : members
+                      .map((member, index) => this._card(member, index + 1, { sesi: bolehIdCard, admin }))
+                      .join('')
               }
             </ol>
-            ${admin && this._sunting ? `<input type="file" id="berkas" accept="${ACCEPTED_TYPES.join(',')}" hidden />` : ''}
+            ${bolehUbah && this._sunting ? `<input type="file" id="berkas" accept="${ACCEPTED_TYPES.join(',')}" hidden />` : ''}
             ${
-              admin && this._sunting
+              bolehUbah && this._sunting
                 ? `<button class="tambah-pemain" type="button" data-act="tambah-pemain"
                            ${this._roster.length >= this._maksPemain() ? 'disabled' : ''}>
                      + Tambah pemain
@@ -1634,10 +1759,31 @@ export class TeamDetail extends BaseElement {
           </section>
           ${
             this._sunting
-              ? `<div class="bilah-simpan">
-                   <span class="bilah-ket">Mengubah <b>${num(this._roster.length)} pemain</b> di ${esc(team.team_name)}</span>
-                   <button type="button" data-act="batal-sunting">Batal</button>
-                   <button type="button" class="utama" data-act="simpan-sunting">Simpan perubahan</button>
+              ? `<div class="bilah-simpan ${this._menyimpan ? 'mengirim' : ''}">
+                   <span class="bilah-ket">
+                     ${
+                       this._menyimpan
+                         ? `${IKON_SIBUK} Menyimpan ${num(this._roster.length)} pemain${
+                             antreBerkas ? ` dan ${num(antreBerkas)} berkas` : ''
+                           }…`
+                         : `Mengubah <b>${num(this._roster.length)} pemain</b> di ${esc(team.team_name)}${
+                             antreBerkas ? ` · <b>${num(antreBerkas)} berkas</b> menunggu` : ''
+                           }`
+                     }
+                   </span>
+                   <button type="button" data-act="batal-sunting" ${this._menyimpan ? 'disabled' : ''}>
+                     Batal
+                   </button>
+                   <button type="button" class="utama" data-act="simpan-sunting"
+                           ${this._menyimpan ? 'disabled' : ''}>
+                     ${
+                       this._menyimpan
+                         ? 'Menyimpan…'
+                         : antreBerkas
+                           ? 'Simpan perubahan & berkas'
+                           : 'Simpan perubahan'
+                     }
+                   </button>
                  </div>`
               : ''
           }`
@@ -1649,7 +1795,7 @@ export class TeamDetail extends BaseElement {
 
     // Pratinjau ID card baru diminta setelah markup ada, dan hanya di mode
     // lihat: mode unggah tidak menampilkan gambarnya sama sekali.
-    if (!unggah && !foto && sesi) this._muatPratinjau(members);
+    if (!unggah && !foto && bolehIdCard) this._muatPratinjau(members);
   }
 
   /**
@@ -1670,20 +1816,24 @@ export class TeamDetail extends BaseElement {
       </p>`;
   }
 
-  _bagianUnggah(team, members, sudahIdCard, admin) {
+  _bagianUnggah(team, members, sudahIdCard, admin, timSendiri = false) {
     // Logo yang baru dipilih sudah dihitung memenuhi syarat: penguncian ini
     // menjaga urutan kerja, bukan menghukum orang yang sudah memilihnya tapi
     // belum menekan Simpan.
     const adaLogo = Boolean(team.logo_url) || this._adaLogoDipilih();
     // Terkunci -> seluruh tombol unggah mati untuk non-admin.
     const mati = !admin && caborTerkunci();
+    const kunciLogo = this._kunciPilihan('logo', team.team_id);
     return `
       <section class="berkas">
         <div class="unggah-bar">
           ${
-            admin
+            /* Kode tim tidak diminta lagi kalau sesinya sendiri sudah mengikat
+               tim ini — kode itulah yang dipakai untuk masuk. Meminta ulang
+               hanya membuat PIC menempelkannya berkali-kali untuk tiap berkas. */
+            admin || timSendiri
               ? `<div class="kode-blok admin">
-                   <span class="kode-label">Masuk sebagai admin</span>
+                   <span class="kode-label">Masuk sebagai ${admin ? 'admin' : 'PIC tim'}</span>
                    <span class="kode-nota">Kode tim tidak diperlukan.</span>
                  </div>`
               : `<div class="kode-blok">
@@ -1694,11 +1844,11 @@ export class TeamDetail extends BaseElement {
                  </div>`
           }
 
-          <div class="logo-mini ${adaLogo ? '' : 'wajib'} ${esc(this._statusPilihan(team.team_id))}">
+          <div class="logo-mini ${adaLogo ? '' : 'wajib'} ${esc(this._statusPilihan(kunciLogo))}">
             <span class="logo-thumb">
               ${
-                this._pilihan[team.team_id]
-                  ? `<img src="${esc(this._pilihan[team.team_id].url)}" alt="Pratinjau logo" />`
+                this._pilihan[kunciLogo]
+                  ? `<img src="${esc(this._pilihan[kunciLogo].url)}" alt="Pratinjau logo" />`
                   : team.logo_url
                     ? `<img src="${esc(team.logo_url)}" alt="" loading="lazy" referrerpolicy="no-referrer" />`
                     : esc(initials(team.team_name))
@@ -1706,13 +1856,7 @@ export class TeamDetail extends BaseElement {
             </span>
             <span class="logo-teks">
               Logo tim ${adaLogo ? '' : '<em>wajib</em>'}
-              <small>${
-                team.logo_url
-                  ? 'Sudah diunggah'
-                  : this._pilihan[team.team_id]
-                    ? 'Dipilih — belum disimpan'
-                    : 'Belum diunggah'
-              }</small>
+              <small>${this._ketPilihan(kunciLogo, team.logo_url)}</small>
             </span>
             <button class="unggah kecil" type="button" data-kind="logo"
                     ${mati ? 'disabled title="Roster sudah dikunci"' : ''}>
@@ -1752,8 +1896,8 @@ export class TeamDetail extends BaseElement {
                 ${esc(m.full_name || '—')}
                 ${m.game_nick ? `<small>${esc(m.game_nick)}</small>` : ''}
               </span>
-              ${this._kotakPilihan(m.player_id)}
-              <span class="tanda-kecil">${m.has_idcard ? 'Sudah' : 'Belum'}</span>
+              ${this._kotakPilihan(this._kunciPilihan('idcard', m.player_id))}
+              ${this._tandaBaris(this._kunciPilihan('idcard', m.player_id), m.has_idcard)}
               <button class="unggah kecil" type="button" data-act="unggah-idcard"
                       data-player="${esc(m.player_id || '')}"
                       ${
@@ -1838,16 +1982,20 @@ export class TeamDetail extends BaseElement {
    * aturan kelengkapan. Fotonya disimpan privat seperti ID card: ia gambar
    * orang, dan tidak ada alasan membuatnya bisa diakses siapa pun bertautan.
    */
-  _bagianFoto(team, members, admin) {
+  _bagianFoto(team, members, admin, timSendiri = false) {
     const sudah = members.filter((m) => m.has_foto).length;
     const mati = !admin && caborTerkunci();
+    const kunciFotoTim = this._kunciPilihan('foto', team.team_id);
     return `
       <section class="berkas">
         <div class="unggah-bar">
           ${
-            admin
+            /* Kode tim tidak diminta lagi kalau sesinya sendiri sudah mengikat
+               tim ini — kode itulah yang dipakai untuk masuk. Meminta ulang
+               hanya membuat PIC menempelkannya berkali-kali untuk tiap berkas. */
+            admin || timSendiri
               ? `<div class="kode-blok admin">
-                   <span class="kode-label">Masuk sebagai admin</span>
+                   <span class="kode-label">Masuk sebagai ${admin ? 'admin' : 'PIC tim'}</span>
                    <span class="kode-nota">Kode tim tidak diperlukan.</span>
                  </div>`
               : `<div class="kode-blok">
@@ -1858,11 +2006,11 @@ export class TeamDetail extends BaseElement {
                  </div>`
           }
 
-          <div class="logo-mini ${esc(this._statusPilihan(team.team_id))}">
+          <div class="logo-mini ${esc(this._statusPilihan(kunciFotoTim))}">
             <span class="logo-thumb">
               ${
-                this._pilihan[team.team_id]
-                  ? `<img src="${esc(this._pilihan[team.team_id].url)}" alt="Pratinjau foto bersama" />`
+                this._pilihan[kunciFotoTim]
+                  ? `<img src="${esc(this._pilihan[kunciFotoTim].url)}" alt="Pratinjau foto bersama" />`
                   : team.has_foto_tim
                     ? IKON_FOTO
                     : esc(initials(team.team_name))
@@ -1870,7 +2018,7 @@ export class TeamDetail extends BaseElement {
             </span>
             <span class="logo-teks">
               Foto bersama <em class="opsional">opsional</em>
-              <small>${team.has_foto_tim ? 'Sudah diunggah' : 'Belum diunggah'}</small>
+              <small>${this._ketPilihan(kunciFotoTim, team.has_foto_tim)}</small>
             </span>
             <button class="unggah kecil" type="button" data-act="unggah-foto-tim"
                     ${mati ? 'disabled title="Roster sudah dikunci"' : ''}>
@@ -1902,8 +2050,8 @@ export class TeamDetail extends BaseElement {
                 ${esc(m.full_name || '—')}
                 ${m.game_nick ? `<small>${esc(m.game_nick)}</small>` : ''}
               </span>
-              ${this._kotakPilihan(m.player_id)}
-              <span class="tanda-kecil">${m.has_foto ? 'Sudah' : 'Belum'}</span>
+              ${this._kotakPilihan(this._kunciPilihan('foto', m.player_id))}
+              ${this._tandaBaris(this._kunciPilihan('foto', m.player_id), m.has_foto)}
               <button class="unggah kecil" type="button" data-act="unggah-foto"
                       data-player="${esc(m.player_id || '')}"
                       ${mati ? 'disabled title="Roster sudah dikunci"' : ''}>
@@ -1937,6 +2085,9 @@ export class TeamDetail extends BaseElement {
     const k = this._kodeTim;
     const terbuka = Boolean(this._kodeTampil && k?.kode);
     const panjang = k?.kode?.length || 8;
+    const sisa = k?.sampai ? sisaWaktu(k.sampai) : '';
+    // Kode yang sudah lewat waktunya diperlakukan sama dengan tidak ada.
+    const adaKode = Boolean(k?.kode) && Boolean(sisa);
 
     return `
       <div class="pj-grup">
@@ -1948,13 +2099,15 @@ export class TeamDetail extends BaseElement {
                 ? 'Mengambil…'
                 : k?.galat
                   ? esc(k.galat)
-                  : terbuka
-                    ? esc(k.kode)
-                    : '•'.repeat(panjang)
+                  : !adaKode
+                    ? '—'
+                    : terbuka
+                      ? esc(k.kode)
+                      : '•'.repeat(panjang)
             }
           </span>
           <button class="kode-mata" type="button" data-act="lihat-kode"
-                  ${k?.memuat ? 'disabled' : ''}
+                  ${k?.memuat || !adaKode ? 'disabled' : ''}
                   title="${terbuka ? 'Sembunyikan kode' : 'Tampilkan kode tim'}"
                   aria-pressed="${terbuka}"
                   aria-label="${terbuka ? 'Sembunyikan kode tim' : 'Tampilkan kode tim'}">
@@ -1969,8 +2122,48 @@ export class TeamDetail extends BaseElement {
               : ''
           }
         </div>
-        <p class="kode-nota">Dipakai PIC tim untuk mengunggah berkas.</p>
+        ${
+          /* Kode ini kredensial berjangka: yang perlu dilihat panitia bukan
+             sekadar "apa kodenya", tapi "masih hidup berapa lama". Tanpa itu,
+             kode yang sudah mati tetap terlihat sah dan tetap dibagikan. */
+          adaKode
+            ? `<p class="kode-nota">
+                 Berlaku <b>${esc(sisa)}</b> lagi · sampai ${esc(jamMenit(k.sampai))}
+               </p>`
+            : '<p class="kode-nota">Belum ada kode aktif untuk tim ini.</p>'
+        }
+        <button class="kode-buat" type="button" data-act="buat-kode" ${this._kodeSibuk ? 'disabled' : ''}>
+          ${this._kodeSibuk ? 'Membuat…' : adaKode ? 'Buat ulang' : 'Buat kode'}
+        </button>
+        ${adaKode ? '<p class="kode-nota">Membuat ulang membatalkan kode yang sekarang.</p>' : ''}
       </div>`;
+  }
+
+  /**
+   * Buat Kode Tim baru untuk tim yang sedang dibuka.
+   *
+   * Hasilnya langsung ditampilkan terbuka: kode ini baru saja dibuat atas
+   * permintaan admin dan memang untuk dibacakan ke PIC — menyembunyikannya lagi
+   * hanya menambah satu klik tanpa menambah keamanan apa pun.
+   */
+  async _buatKode() {
+    const team = this._team;
+    if (!team || this._kodeSibuk) return;
+
+    this._kodeSibuk = true;
+    this.render();
+    try {
+      const hasil = await buatKodeTim(team.team_id);
+      this._kodeTim = { kode: hasil.kode, sampai: hasil.sampai };
+      this._kodeTampil = true;
+      this._kodeSibuk = false;
+      this.render();
+      this._pesan(`Kode tim dibuat, berlaku ${sisaWaktu(hasil.sampai)}.`, 'sukses');
+    } catch (error) {
+      this._kodeSibuk = false;
+      this.render();
+      this._pesan(error.message || 'Gagal membuat kode tim.', 'galat');
+    }
   }
 
   /** Tampilkan / sembunyikan kode; ambil dari GAS hanya saat pertama diminta. */
@@ -1995,7 +2188,8 @@ export class TeamDetail extends BaseElement {
 
     try {
       const daftar = await ambilKodeTim({ teamId: team.team_id });
-      this._kodeTim = { kode: daftar[0]?.kode || '' };
+      // Daftar kosong berarti belum ada kode aktif — bukan galat.
+      this._kodeTim = { kode: daftar[0]?.kode || '', sampai: daftar[0]?.sampai || 0 };
       this._kodeTampil = true;
     } catch (error) {
       this._kodeTim = { galat: error.message || 'Gagal mengambil kode' };
@@ -2087,9 +2281,10 @@ export class TeamDetail extends BaseElement {
         </div>
 
         ${
-          // ID card hanya untuk yang sudah masuk. Ditampilkan langsung di dalam
-          // kartu supaya panitia bisa mencocokkan data dengan kartunya tanpa
-          // berpindah layar; klik untuk memperbesar.
+          // ID card hanya untuk yang sudah masuk. Ditampilkan UTUH di dalam
+          // kartu supaya panitia bisa membaca nama dan NIP di kartunya tanpa
+          // membuka apa pun; klik hanya untuk memperbesar kalau tulisannya
+          // terlalu kecil.
           sesi
             ? `<div class="idcard-blok">
                  <span class="lbl">ID Card</span>
@@ -2098,7 +2293,8 @@ export class TeamDetail extends BaseElement {
                      ? '<div class="idcard-kosong">Belum diunggah</div>'
                      : pratinjau?.dataUrl
                        ? `<button class="idcard-gambar" type="button" data-act="lihat-idcard"
-                                  data-player="${esc(pid)}" title="Perbesar ID card ${esc(nama)}">
+                                  data-player="${esc(pid)}"
+                                  title="Perbesar ID card ${esc(nama)} (layar lebar)">
                             <img src="${esc(pratinjau.dataUrl)}" alt="ID card ${esc(nama)}" />
                           </button>`
                        : pratinjau?.galat
@@ -2266,6 +2462,51 @@ export class TeamDetail extends BaseElement {
       </div>`;
   }
 
+  /**
+   * Kunci antrean unggahan: JENIS + sasaran, bukan sasaran saja.
+   *
+   * Dulu kuncinya hanya playerId (atau teamId untuk berkas tingkat tim), dan
+   * itu membuat dua jenis berkas untuk sasaran yang sama saling menimpa diam-
+   * diam: memilih foto seorang pemain menghapus ID card-nya yang belum
+   * tersimpan, dan foto bersama menimpa logo tim. Pratinjau serta penanda
+   * 'sedang/gagal' pun bisa tampil di layar yang salah, karena keduanya dicari
+   * dengan kunci yang sama.
+   */
+  _kunciPilihan(kind, sasaran) {
+    return `${kind}:${sasaran || ''}`;
+  }
+
+  /**
+   * Keterangan satu berkas tingkat tim (logo / foto bersama).
+   *
+   * Menyebut SELURUH keadaan yang bisa dialami berkas itu, bukan hanya
+   * "sudah/belum diunggah". Tanpa tahap antara, menekan Simpan terasa seperti
+   * tidak terjadi apa-apa: layar diam beberapa detik, lalu berubah — atau tidak
+   * berubah sama sekali kalau gagal, dan tidak ada yang mengatakan kenapa.
+   */
+  _ketPilihan(kunci, sudahAda) {
+    const pilihan = this._pilihan[kunci];
+    if (pilihan?.status === 'sedang') return 'Mengunggah…';
+    if (pilihan?.status === 'gagal') return `Gagal — ${pilihan.galat || 'coba simpan lagi'}`;
+    if (pilihan) return 'Dipilih — belum disimpan';
+    return sudahAda ? 'Sudah diunggah' : 'Belum diunggah';
+  }
+
+  /**
+   * Penanda satu baris pemain. Sama seperti _ketPilihan, tetapi sependek
+   * mungkin: ia berdiri di baris yang sempit, di sebelah tombol unggah.
+   * Judulnya (title) memuat alasan kegagalan yang tidak muat ditulis.
+   */
+  _tandaBaris(kunci, sudahAda) {
+    const pilihan = this._pilihan[kunci];
+    if (pilihan?.status === 'sedang') return '<span class="tanda-kecil sedang">Mengunggah…</span>';
+    if (pilihan?.status === 'gagal') {
+      return `<span class="tanda-kecil gagal" title="${esc(pilihan.galat || '')}">Gagal</span>`;
+    }
+    if (pilihan) return '<span class="tanda-kecil dipilih">Dipilih</span>';
+    return `<span class="tanda-kecil">${sudahAda ? 'Sudah' : 'Belum'}</span>`;
+  }
+
   /** Kelas status ('sedang' / 'gagal') untuk satu sasaran, atau ''. */
   _statusPilihan(kunci) {
     return this._pilihan[kunci]?.status || '';
@@ -2297,8 +2538,19 @@ export class TeamDetail extends BaseElement {
    * dirender bersyarat, mengisinya di tengah unggahan akan membuang isian yang
    * sedang diketik.
    */
+  /**
+   * Ikon untuk satu jenis pesan. Dipakai _bilahPesan() (saat render) DAN
+   * _pesan() (saat pesan diganti tanpa render). Dulu keduanya menyimpan
+   * petanya masing-masing dan sempat berbeda isi — 'sibuk' punya entri di satu
+   * tempat dan tidak di tempat lain, sehingga pemutarnya muncul atau hilang
+   * tergantung jalur mana yang kebetulan menulis terakhir.
+   */
+  _ikonPesan(jenis) {
+    return { galat: IKON_PERINGATAN, sukses: IKON_CEK, sibuk: IKON_SIBUK }[jenis] || '';
+  }
+
   _bilahPesan() {
-    const ikon = { galat: IKON_PERINGATAN, sukses: IKON_CEK, sibuk: '' }[this._pesanJenis] || '';
+    const ikon = this._ikonPesan(this._pesanJenis);
     return `
       <p class="pesan ${esc(this._pesanJenis)}" role="status" aria-live="polite">
         ${ikon}<span class="pesan-teks">${esc(this._pesanTeks)}</span>
@@ -2326,20 +2578,37 @@ export class TeamDetail extends BaseElement {
     const pilihan = this._pilihanStatus();
     const status = (baris.status || '').toUpperCase();
 
+    /* PIC tim menyunting dengan wewenang yang jauh lebih sempit daripada admin.
+       Pada pemain yang SUDAH terdaftar ia hanya boleh membetulkan data
+       PERMAINAN: Nick Game, ID Game, dan Server — ketiganya hanya ia yang tahu,
+       dan paling sering salah ketik saat pendaftaran. Nama dan status
+       kepegawaian berasal dari pendaftaran resmi: mengubah nama berarti menukar
+       orang, dan status menentukan kelayakan tim (batas jumlah TAD). Menghapus
+       pemain juga bukan haknya.
+       Pemain BARU tidak dibatasi — seluruh datanya memang berasal dari PIC.
+       Semua batas ini ditegakkan ULANG di GAS; yang di sini hanya supaya tidak
+       ada tombol yang menjanjikan sesuatu yang akan ditolak. */
+    const terbatas = this._suntingTerbatas() && Boolean(baris.playerId);
+
     return `
       <li style="--hue:${hueOf(baris.nick || baris.name || String(nomor))}" data-uid="${id}">
         <span class="slot">${nomor}</span>
         <div class="sunting" data-uid="${id}">
           <div class="sunting-kepala">
             <span class="sunting-tanda">${baris.playerId ? `Pemain ${nomor}` : 'Pemain baru'}</span>
-            <button type="button" class="hapus" data-act="hapus-pemain" data-uid="${id}"
-                    title="Hapus pemain ini" aria-label="Hapus pemain ${esc(baris.name || nomor)}">
-              ${ICON_HAPUS}
-            </button>
+            ${
+              terbatas
+                ? '<span class="sunting-nota">Nama & status dikunci panitia</span>'
+                : `<button type="button" class="hapus" data-act="hapus-pemain" data-uid="${id}"
+                           title="Hapus pemain ini" aria-label="Hapus pemain ${esc(baris.name || nomor)}">
+                     ${ICON_HAPUS}
+                   </button>`
+            }
           </div>
           <div>
             <label for="f-nama-${id}">Nama lengkap</label>
-            <input id="f-nama-${id}" name="name" value="${esc(baris.name || '')}" autocomplete="off" />
+            <input id="f-nama-${id}" name="name" value="${esc(baris.name || '')}" autocomplete="off"
+                   ${terbatas ? 'readonly tabindex="-1"' : ''} />
           </div>
           <div>
             <label for="f-nick-${id}">Nick Game</label>
@@ -2358,7 +2627,7 @@ export class TeamDetail extends BaseElement {
           </div>
           <div>
             <label for="f-sts-${id}">Status</label>
-            <select id="f-sts-${id}" name="status">
+            <select id="f-sts-${id}" name="status" ${terbatas ? 'disabled' : ''}>
               <option value=""${status ? '' : ' selected'}>— pilih —</option>
               ${pilihan
                 .map((v) => `<option value="${esc(v)}"${status === v ? ' selected' : ''}>${esc(v)}</option>`)
@@ -2370,6 +2639,17 @@ export class TeamDetail extends BaseElement {
             <span class="idcard-status ${baris.hasIdCard ? 'ada' : ''}">
               ID Card · ${baris.hasIdCard ? 'sudah' : 'belum'}
             </span>
+            ${
+              /* Berkas yang baru dipilih HARUS terlihat di sini juga. Tanpa ini
+                 mode ubah adalah jalan buntu: berkasnya masuk antrean tanpa
+                 satu pun tanda, lalu terbaca seperti tidak ada yang terpilih. */
+              baris.playerId ? this._kotakPilihan(this._kunciPilihan('idcard', baris.playerId)) : ''
+            }
+            ${
+              baris.playerId
+                ? this._tandaBaris(this._kunciPilihan('idcard', baris.playerId), baris.hasIdCard)
+                : ''
+            }
             ${
               // Pemain baru belum punya player_id — dan nama berkas di Drive
               // diturunkan darinya. Jadi unggahannya menunggu simpanan pertama.
@@ -2444,7 +2724,7 @@ export class TeamDetail extends BaseElement {
     // muncul atau hilang, dan suntingan yang sedang terbuka harus ditutup.
     this.track(
       onAuth(() => {
-        if (this._sunting && !adalahAdmin()) this._sunting = false;
+        if (this._sunting && !this._bolehUbah()) this._sunting = false;
         if (this._lihat && !sesiSekarang()) this._lihat = null;
         if (this._team) this.requestRender();
       })
@@ -2467,7 +2747,16 @@ export class TeamDetail extends BaseElement {
 
       const lihat = event.target.closest('[data-act="lihat-idcard"]');
       if (lihat) {
+        // CSS sudah mematikan sentuhannya di ponsel, tapi penekanan lewat papan
+        // ketik tidak melalui pointer-events — jadi aturannya ditegakkan di sini
+        // juga, di satu tempat yang sama-sama berlaku untuk keduanya.
+        if (!this._bolehPerbesar()) return;
         this._bukaIdCard(lihat.dataset.player);
+        return;
+      }
+
+      if (event.target.closest('[data-act="buat-kode"]')) {
+        this._buatKode();
         return;
       }
 
@@ -2482,7 +2771,7 @@ export class TeamDetail extends BaseElement {
       }
 
       if (event.target.closest('[data-act="mulai-sunting"]')) {
-        this._mulaiSunting();
+        if (this._bolehUbah()) this._mulaiSunting();
         return;
       }
 
@@ -2496,6 +2785,10 @@ export class TeamDetail extends BaseElement {
 
       const hapus = event.target.closest('[data-act="hapus-pemain"]');
       if (hapus) {
+        // PIC tim tidak boleh menghapus pemain. GAS menolaknya juga, tapi
+        // menolak di sini membuat penolakannya terasa sebagai aturan, bukan
+        // sebagai kegagalan simpan yang membingungkan.
+        if (this._suntingTerbatas()) return;
         this._hapusPemain(hapus.dataset.uid);
         return;
       }
@@ -2629,7 +2922,37 @@ export class TeamDetail extends BaseElement {
       status: r.status.trim().toUpperCase(),
     }));
 
-    this.$$('.bilah-simpan button').forEach((b) => (b.disabled = true));
+    // Berkas yang dipilih dari mode ubah ikut dikirim oleh tombol yang sama.
+    // Dulu ia hanya menyimpan roster, sehingga ID card yang baru dipilih diam
+    // di antrean tanpa jalan keluar — dan kalau tidak ada field yang berubah,
+    // GAS menjawab "Tidak ada perubahan untuk disimpan", membuat seluruh aksi
+    // terbaca seperti gagal total.
+    const adaBerkas = Object.keys(this._pilihan).length > 0;
+    const berubah = this._rosterBerubah(roster);
+
+    if (!berubah && !adaBerkas) {
+      this._pesan('Tidak ada perubahan untuk disimpan.', 'galat');
+      return;
+    }
+
+    // Ditandai lewat state lalu dirender, bukan dengan mematikan tombol satu
+    // per satu: dengan begitu bilahnya ikut berubah jadi "Menyimpan…" beserta
+    // pemutarnya. Sebelumnya tombol hanya meredup tanpa satu kata pun, dan
+    // permintaan yang memakan beberapa detik terbaca seperti tidak jalan.
+    this._menyimpan = true;
+    this.render();
+
+    if (!berubah) {
+      // Hanya berkas yang berubah: lewati permintaan roster sama sekali.
+      // _menyimpan dibiarkan menyala — _simpanBerkas() yang akan mematikannya,
+      // sehingga tidak ada kedipan "selesai" di antara kedua tahap.
+      this._sunting = false;
+      this._roster = null;
+      this.render();
+      await this._simpanBerkas();
+      return;
+    }
+
     this._pesan(`Menyimpan ${roster.length} pemain…`, 'sibuk');
 
     try {
@@ -2655,12 +2978,86 @@ export class TeamDetail extends BaseElement {
 
       this._sunting = false;
       this._roster = null;
+      if (!adaBerkas) this._menyimpan = false;
       this.render();
+
+      if (adaBerkas) {
+        // Urutannya penting: pemain baru baru punya Player ID setelah roster
+        // tersimpan, dan nama berkas di Drive diturunkan dari ID itu.
+        await this._simpanBerkas(`${hasil.jumlah} perubahan tersimpan. `);
+        return;
+      }
       this._pesan(`${hasil.jumlah} perubahan tersimpan.`, 'sukses');
     } catch (error) {
-      this.$$('.bilah-simpan button').forEach((b) => (b.disabled = false));
-      this._pesan(error.message || 'Gagal menyimpan.', 'galat');
+      const pesan = error.message || 'Gagal menyimpan.';
+
+      // GAS menolak simpanan yang tidak mengubah apa pun. Perbandingan di sini
+      // dan perbandingan di sana bisa berbeda pendapat soal nilai yang setara
+      // (huruf besar/kecil, spasi). Kalau itu yang terjadi, berkas yang
+      // mengantre TIDAK boleh ikut batal — penolakan itu berarti rosternya
+      // memang sudah benar, bukan bahwa aksinya gagal.
+      if (/tidak ada perubahan/i.test(pesan) && adaBerkas) {
+        this._sunting = false;
+        this._roster = null;
+        this.render();
+        await this._simpanBerkas();
+        return;
+      }
+
+      // Gagal: bilahnya kembali bisa ditekan supaya bisa dicoba lagi.
+      this._menyimpan = false;
+      this.render();
+      this._pesan(pesan, 'galat');
     }
+  }
+
+  /** Bolehkah sesi ini menyunting tim yang sedang dibuka? */
+  _bolehUbah() {
+    return adalahAdmin() || bolehSuntingTim(this._team?.team_id);
+  }
+
+  /**
+   * Sedang menyunting dengan wewenang terbatas (PIC tim, bukan admin)?
+   * Menentukan field mana yang dikunci dan apakah tombol hapus muncul.
+   */
+  _suntingTerbatas() {
+    return !adalahAdmin() && adalahTim();
+  }
+
+  /**
+   * Bolehkah ID card diperbesar? Tidak di layar sempit.
+   *
+   * Ambangnya disamakan dengan media query di atas (720 px). matchMedia dibaca
+   * saat ditekan, bukan disimpan saat dimuat, supaya layar yang diputar atau
+   * jendela yang diubah ukurannya langsung mengikuti tanpa render ulang.
+   */
+  _bolehPerbesar() {
+    return !window.matchMedia('(max-width: 720px)').matches;
+  }
+
+  /**
+   * Apakah roster yang sedang disunting berbeda dari yang tersimpan?
+   *
+   * Dipakai untuk memutuskan apakah permintaan simpan roster perlu dikirim sama
+   * sekali. Tanpa ini, menyimpan berkas saja akan tetap memanggil GAS dan
+   * ditolak dengan "Tidak ada perubahan untuk disimpan" — penolakan yang benar,
+   * tapi menutupi unggahan yang sebenarnya berhasil.
+   */
+  _rosterBerubah(roster) {
+    const lama = this._team?.members || [];
+    if (lama.length !== roster.length) return true;
+    return roster.some((r, i) => {
+      const m = lama[i];
+      if (!m) return true;
+      return (
+        (r.playerId || '') !== (m.player_id || '') ||
+        r.name !== (m.full_name || '') ||
+        r.nick !== (m.game_nick || '') ||
+        r.gameId !== (m.game_id || '') ||
+        r.server !== (m.game_server || '') ||
+        r.status !== (m.status || '').toUpperCase()
+      );
+    });
   }
 
   /**
@@ -2697,7 +3094,11 @@ export class TeamDetail extends BaseElement {
 
     const input = this.$('#berkas');
     if (!input) return;
-    this._sasaran = { kind, kunci: playerId || this._team?.team_id, playerId };
+    this._sasaran = {
+      kind,
+      kunci: this._kunciPilihan(kind, playerId || this._team?.team_id),
+      playerId,
+    };
     input.value = '';
     input.click();
   }
@@ -2739,19 +3140,32 @@ export class TeamDetail extends BaseElement {
    * berhasil dilepas dari antrean, yang gagal tetap tertahan dan ditandai
    * merah supaya tinggal dicoba ulang.
    */
-  async _simpanBerkas() {
+  async _simpanBerkas(awalan = '') {
     const team = this._team;
-    if (!team) return;
+    // Setiap jalan keluar awal WAJIB memadamkan penandanya: fungsi ini bisa
+    // dipanggil dari mode ubah data, yang menyalakannya lebih dulu. Kalau
+    // dilewatkan, bilahnya membeku bertuliskan "Menyimpan…" selamanya.
+    const batal = () => {
+      if (this._menyimpan) {
+        this._menyimpan = false;
+        this.render();
+      }
+    };
+
+    if (!team) return batal();
 
     const antre = Object.keys(this._pilihan).map((kunci) => ({ kunci, ...this._pilihan[kunci] }));
-    if (!antre.length) return;
+    if (!antre.length) return batal();
 
     // Logo didahulukan: GAS menolak ID card selama logo tim belum ada, jadi
     // mengirim ID card lebih dulu akan gagal padahal logonya ada di antrean.
     antre.sort((a, b) => (a.kind === 'logo' ? -1 : 0) - (b.kind === 'logo' ? -1 : 0));
 
     const kode = this.$('#kode')?.value.trim() || '';
-    if (!adalahAdmin() && !kode) {
+    // Sesi tim tidak dimintai kode: sesinya sendiri lahir dari kode itu, dan
+    // GAS menerimanya sebagai ganti.
+    if (!adalahAdmin() && !bolehSuntingTim(team.team_id) && !kode) {
+      batal();
       this._pesan('Isi kode tim dulu. Kode dibagikan panitia ke PIC tiap tim.', 'galat');
       this.$('#kode')?.focus();
       return;
@@ -2766,7 +3180,13 @@ export class TeamDetail extends BaseElement {
     for (var i = 0; i < antre.length; i++) {
       const item = antre[i];
       this._progres = { selesai: i, total: antre.length, nama: this._labelBerkas(item) };
-      this._pesan('', '');
+      // Kemajuan juga diucapkan lewat bilah pesan, bukan hanya lewat batang di
+      // bawah: batang itu hanya ada di layar unggah, sedangkan unggahan bisa
+      // dijalankan dari mode ubah data yang tidak memilikinya.
+      this._pesan(
+        `Mengunggah ${num(i + 1)} dari ${num(antre.length)} — ${this._labelBerkas(item)}…`,
+        'sibuk'
+      );
       this._pilihan[item.kunci].status = 'sedang';
       this.render();
 
@@ -2821,14 +3241,14 @@ export class TeamDetail extends BaseElement {
     this.render();
 
     if (!gagal.length) {
-      this._pesan(`${berhasil} berkas tersimpan.`, 'sukses');
+      this._pesan(`${awalan}${berhasil} berkas tersimpan.`, 'sukses');
       return;
     }
 
     const sudah = berhasil ? `${berhasil} tersimpan. ` : '';
     if (dibatalkan) {
       this._pesan(
-        `${sudah}${gagal[0]} ${dibatalkan} berkas berikutnya dibatalkan — ` +
+        `${awalan}${sudah}${gagal[0]} ${dibatalkan} berkas berikutnya dibatalkan — ` +
           'perbaiki dulu, lalu tekan Simpan lagi.',
         'galat'
       );
@@ -2837,7 +3257,7 @@ export class TeamDetail extends BaseElement {
     }
 
     this._pesan(
-      `${sudah}${gagal.length} gagal — ${gagal[0]} ` +
+      `${awalan}${sudah}${gagal.length} gagal — ${gagal[0]} ` +
         'Berkas yang gagal masih tersimpan di daftar, tinggal tekan Simpan lagi.',
       'galat'
     );
@@ -2874,7 +3294,7 @@ export class TeamDetail extends BaseElement {
 
     const el = this.$('.pesan');
     if (!el) return;
-    const ikon = { galat: IKON_PERINGATAN, sukses: IKON_CEK }[jenis] || '';
+    const ikon = this._ikonPesan(jenis);
     el.innerHTML = `${ikon}<span class="pesan-teks">${esc(teks)}</span>`;
     el.className = `pesan ${jenis}`.trim();
 
@@ -2885,7 +3305,14 @@ export class TeamDetail extends BaseElement {
 
     // Bawa ke layar: pesan di puncak daftar tidak berguna kalau pengguna sedang
     // menggulir di baris ketujuh.
-    if (jenis === 'galat') el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    //
+    // Kabar BERHASIL ikut dibawa, bukan hanya kabar gagal. Setelah menekan
+    // Simpan di ujung bawah daftar foto, bilah pesannya ada di luar layar dan
+    // satu-satunya yang terlihat hanyalah tombol Simpan yang menghilang —
+    // unggahan yang sebenarnya berhasil terbaca seperti tidak terjadi apa-apa.
+    if (jenis === 'galat' || jenis === 'sukses') {
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
   }
 
   _lookup(state) {

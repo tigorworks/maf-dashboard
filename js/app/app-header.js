@@ -236,6 +236,15 @@ const styles = css`
     .terkunci-chip span {
       display: none;
     }
+    /* Judulnya nowrap, jadi tanpa ini ia tidak menyusut melainkan MENEMBUS ke
+       atas chip cabor dan tombol di sebelahnya. */
+    .titles {
+      overflow: hidden;
+    }
+    h1 {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
   }
   @media (max-width: 980px) {
     .bar {
@@ -257,11 +266,11 @@ const styles = css`
       width: 34px;
       height: 34px;
     }
-    h1 {
-      font-size: var(--fs-md);
-    }
-    /* Tagline dilepas agar judul tidak terpotong di layar 360–390 px. */
-    p {
+    /* Judul dilepas seluruhnya, bukan sekadar dikecilkan. Di 390 px, logo +
+       judul + chip cabor + dua tombol admin tidak muat bersama — dan saat admin
+       masuk, judul, chip "MLBB", dan tombol keluar benar-benar saling menimpa.
+       Logonya sendiri sudah menjawab "halaman apa ini". */
+    .titles {
       display: none;
     }
   }

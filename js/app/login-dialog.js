@@ -139,12 +139,12 @@ export class LoginDialog extends BaseElement {
       <section class="kotak" role="dialog" aria-modal="true" aria-labelledby="judul">
         <div class="lambang" role="img" aria-label="MAF 2026"></div>
         <h2 id="judul">Masuk</h2>
-        <p class="lead">Untuk panitia dan relawan verifikasi.</p>
+        <p class="lead">Untuk panitia, relawan verifikasi, dan PIC tim.</p>
 
         <form>
-          <label for="kunci">Kunci akses</label>
+          <label for="kunci">Kunci akses atau Kode Tim</label>
           <input id="kunci" name="kunci" type="password" autocomplete="off" spellcheck="false"
-                 placeholder="MAF-XXXX-XXXX-XXXX-XXXX" maxlength="32" />
+                 placeholder="MAF-XXXX-… atau Kode Tim" maxlength="32" />
           <p class="pesan ${esc(this._pesanJenis)}" role="status" aria-live="polite">${esc(this._pesanTeks)}</p>
           <div class="aksi">
             <button type="button" data-act="batal">Batal</button>
@@ -155,6 +155,8 @@ export class LoginDialog extends BaseElement {
         </form>
 
         <p class="catatan">
+          PIC tim memakai <b>Kode Tim</b> dari panitia: masuk dengan kode itu membuka
+          pengubahan terbatas dan unggahan berkas untuk timnya sendiri.
           Sesi berakhir sendiri setelah 3 jam tidak digunakan. Kunci dibagikan
           panitia dan berlaku untuk satu orang — jangan diteruskan.
         </p>
@@ -226,7 +228,7 @@ export class LoginDialog extends BaseElement {
     } catch (error) {
       this._sibuk = false;
       this.render();
-      this._pesan(error.message || 'Kunci tidak dikenal.', 'galat');
+      this._pesan(error.message || 'Kunci atau Kode Tim tidak dikenal.', 'galat');
       const input = this.$('#kunci');
       input?.focus();
       input?.select();

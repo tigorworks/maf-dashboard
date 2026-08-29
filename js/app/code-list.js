@@ -11,7 +11,7 @@
  */
 import { BaseElement, define } from '../core/element.js';
 import { css } from '../core/css.js';
-import { esc, normalize, num } from '../core/format.js';
+import { esc, jamMenit, normalize, num, sisaWaktu } from '../core/format.js';
 import { caborTerkunci, setShowCodes, setTerkunci, store } from '../data/app-state.js';
 import { ambilKodeTim, aturKunciRoster } from '../data/auth.js';
 import { GAME_META } from '../data/source.js';
@@ -234,6 +234,19 @@ const styles = css`
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
+  }
+  .sisa {
+    font-size: var(--fs-sm);
+    font-weight: 700;
+    color: #45c47a;
+  }
+  .sisa.habis {
+    color: var(--peringatan);
+  }
+  .sampai {
+    display: block;
+    font-size: var(--fs-xs);
+    color: var(--text-faint);
   }
   .kode {
     font-family: var(--font-mono);
@@ -460,6 +473,12 @@ export class CodeList extends BaseElement {
   _isi(baris) {
     if (this._galat) return `<div class="status">${esc(this._galat)}</div>`;
     if (!this._data) return '<div class="status">Mengambil kode tim…</div>';
+    if (!this._data.length) {
+      return `<div class="status">
+                Belum ada Kode Tim yang aktif. Kode dibuat dari halaman detail tim
+                dan berlaku 6 jam.
+              </div>`;
+    }
     if (!baris.length) {
       return `<div class="status">Tidak ada tim yang cocok dengan “${esc(this._cari)}”.</div>`;
     }
@@ -474,6 +493,7 @@ export class CodeList extends BaseElement {
             <th>No HP</th>
             <th>Tim</th>
             <th>Kode Tim</th>
+            <th>Berlaku</th>
             <th><span class="sr-only">Salin</span></th>
           </tr>
         </thead>
@@ -491,6 +511,19 @@ export class CodeList extends BaseElement {
               <td data-label="No HP"><span class="hp">${esc(b.hp || '—')}</span></td>
               <td data-label="Tim"><span class="tim">${esc(b.teamName || '—')}</span></td>
               <td data-label="Kode"><span class="kode">${esc(b.kode || '—')}</span></td>
+              <td data-label="Berlaku">
+                ${
+                  /* Sisa waktu dulu, jam berakhirnya kemudian: yang menentukan
+                     apakah kode ini masih pantas dibagikan adalah "berapa lama
+                     lagi", bukan "pukul berapa". */
+                  b.sampai
+                    ? `<span class="sisa ${sisaWaktu(b.sampai) ? '' : 'habis'}">
+                         ${esc(sisaWaktu(b.sampai) || 'habis')}
+                       </span>
+                       <small class="sampai">${esc(jamMenit(b.sampai))}</small>`
+                    : '—'
+                }
+              </td>
               <td class="aksi">
                 <button class="salin ${this._tersalin === b.teamId ? 'selesai' : ''}" type="button"
                         data-salin="${esc(b.kode || '')}" data-team="${esc(b.teamId)}"
