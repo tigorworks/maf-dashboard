@@ -213,11 +213,14 @@ const styles = css`
     height: 16px;
     background: color-mix(in srgb, var(--peran-tone) 38%, transparent);
   }
+  /* Tombol keluar. 26 px cukup untuk kursor, tidak untuk jempol — dan ini
+     tombol yang salah tekannya berarti kehilangan sesi di tengah pekerjaan.
+     Ikonnya tetap kecil; yang diperbesar area sentuhnya. */
   .sesi button {
     display: grid;
     place-items: center;
-    width: 26px;
-    height: 26px;
+    width: 32px;
+    height: 32px;
     color: inherit;
     border-radius: var(--r-pill);
   }
@@ -230,6 +233,10 @@ const styles = css`
   }
 
   @media (max-width: 700px) {
+    .sesi button {
+      width: 38px;
+      height: 38px;
+    }
     .sesi .nama,
     .masuk span,
     .kode-tim span,

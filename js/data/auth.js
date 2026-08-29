@@ -279,11 +279,11 @@ export async function aturKunciRoster(game, kunci) {
 
 /**
  * Hapus satu tim beserta berkasnya. HANYA admin — GAS yang menegakkannya.
- * Nama tim dikirim ulang sebagai konfirmasi dan dicocokkan di server; tanpa itu
- * satu klik yang salah sasaran cukup untuk menghapus tim yang keliru.
+ * Konfirmasinya di layar (dialog), bukan lewat kiriman: yang menahan
+ * penghapusan sembarangan adalah sesi admin.
  */
-export async function hapusTim(teamId, konfirmasi) {
-  return kirimTerautentikasi({ action: 'hapusTim', teamId, konfirmasi });
+export async function hapusTim(teamId) {
+  return kirimTerautentikasi({ action: 'hapusTim', teamId });
 }
 
 export async function simpanRoster(teamId, roster) {

@@ -235,6 +235,13 @@ const styles = css`
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
+  /* Dibungkus satu elemen supaya di mode kartu ponsel — yang menata tiap sel
+     sebagai baris flex "label di kiri, nilai di kanan" — sisa waktu dan jam
+     berakhirnya tetap menempel jadi satu nilai, bukan dua item yang terlempar
+     ke ujung yang berbeda. */
+  .berlaku {
+    text-align: right;
+  }
   .sisa {
     font-size: var(--fs-sm);
     font-weight: 700;
@@ -517,10 +524,12 @@ export class CodeList extends BaseElement {
                      apakah kode ini masih pantas dibagikan adalah "berapa lama
                      lagi", bukan "pukul berapa". */
                   b.sampai
-                    ? `<span class="sisa ${sisaWaktu(b.sampai) ? '' : 'habis'}">
-                         ${esc(sisaWaktu(b.sampai) || 'habis')}
-                       </span>
-                       <small class="sampai">${esc(jamMenit(b.sampai))}</small>`
+                    ? `<span class="berlaku">
+                         <span class="sisa ${sisaWaktu(b.sampai) ? '' : 'habis'}">
+                           ${esc(sisaWaktu(b.sampai) || 'habis')}
+                         </span>
+                         <small class="sampai">${esc(jamMenit(b.sampai))}</small>
+                       </span>`
                     : '—'
                 }
               </td>
