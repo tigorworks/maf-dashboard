@@ -20,6 +20,13 @@ const TIMEOUT = 25000;
 
 export const PERAN = { ADMIN: 'admin', RELAWAN: 'relawan', TIM: 'tim' };
 
+/**
+ * Dua jenis Kode Tim. 'penuh' boleh menyunting roster DAN mengunggah; 'unggah'
+ * hanya mengunggah berkas. Jenisnya melekat pada kode saat dibuat, jadi
+ * mengganti wewenang berarti membuat kode baru.
+ */
+export const JENIS_KODE = { PENUH: 'penuh', UNGGAH: 'unggah' };
+
 /* ------------------------------ cookie ------------------------------ */
 
 function bacaCookie() {
@@ -104,13 +111,23 @@ export function adalahTim() {
 }
 
 /**
- * Bolehkah sesi ini menyunting tim tertentu?
+ * Bolehkah sesi ini MENYUNTING tim tertentu?
  *
- * Admin: semua tim. PIC tim: timnya sendiri. Selain itu: tidak.
- * Ini pertanyaan TAMPILAN — jawabannya menentukan tombol mana yang muncul.
- * Penolakan yang sesungguhnya tetap terjadi di GAS.
+ * Admin: semua tim. PIC tim: timnya sendiri, dan hanya kalau kodenya berjenis
+ * 'penuh' — kode 'unggah' memang tidak dimaksudkan menyentuh data.
+ * Ini pertanyaan TAMPILAN; penolakan yang sesungguhnya tetap terjadi di GAS.
  */
 export function bolehSuntingTim(teamId) {
+  if (adalahAdmin()) return true;
+  return bolehUnggahTim(teamId) && sesi?.jenis === JENIS_KODE.PENUH;
+}
+
+/**
+ * Bolehkah sesi ini MENGUNGGAH berkas tim tertentu?
+ * Kedua jenis kode boleh — itu justru satu-satunya hal yang bisa dilakukan
+ * pemegang kode 'unggah'.
+ */
+export function bolehUnggahTim(teamId) {
   if (adalahAdmin()) return true;
   return adalahTim() && Boolean(teamId) && sesi?.teamId === teamId;
 }
@@ -135,6 +152,7 @@ function pasangSesi(data, token) {
     nama: data.nama,
     peran: data.peran,
     teamId: data.teamId || '',
+    jenis: data.jenis || '',
     token,
     sampai: Date.now() + IDLE_MS,
   };
@@ -263,9 +281,13 @@ export async function ambilKodeTim({ game = '', teamId = '' } = {}) {
  * Membuat ulang MENGGANTI kode sebelumnya: satu tim selalu punya paling banyak
  * satu kode hidup.
  */
-export async function buatKodeTim(teamId) {
-  const hasil = await kirimTerautentikasi({ action: 'buatKode', teamId });
-  return { kode: hasil.kode || '', sampai: Number(hasil.sampai || 0) };
+export async function buatKodeTim(teamId, jenis = JENIS_KODE.UNGGAH) {
+  const hasil = await kirimTerautentikasi({ action: 'buatKode', teamId, jenis });
+  return {
+    kode: hasil.kode || '',
+    jenis: hasil.jenis || JENIS_KODE.UNGGAH,
+    sampai: Number(hasil.sampai || 0),
+  };
 }
 
 /**
@@ -282,6 +304,16 @@ export async function aturKunciRoster(game, kunci) {
  * Konfirmasinya di layar (dialog), bukan lewat kiriman: yang menahan
  * penghapusan sembarangan adalah sesi admin.
  */
+/**
+ * Buang SELURUH Kode Tim yang sedang aktif. HANYA admin.
+ * Dipakai saat panitia ingin menghentikan semua akses peserta sekaligus —
+ * misalnya setelah data ditulis ulang atau menjelang penutupan.
+ */
+export async function resetKodeTim() {
+  const hasil = await kirimTerautentikasi({ action: 'resetKode' });
+  return Number(hasil.dihapus || 0);
+}
+
 export async function hapusTim(teamId) {
   return kirimTerautentikasi({ action: 'hapusTim', teamId });
 }

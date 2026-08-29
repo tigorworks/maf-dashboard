@@ -21,7 +21,7 @@ import {
 import { ACCEPTED_TYPES, uploadTeamFile } from '../data/upload.js';
 import {
   adalahAdmin, adalahTim, ambilIdCard, ambilKodeTim, bolehLihatIdCard,
-  bolehSuntingTim, buatKodeTim, onAuth, sesiSekarang, simpanRoster,
+  bolehSuntingTim, bolehUnggahTim, buatKodeTim, JENIS_KODE, onAuth, sesiSekarang, simpanRoster,
 } from '../data/auth.js';
 import { periksaTim } from '../data/rules.js';
 
@@ -454,6 +454,20 @@ const styles = css`
   /* Angka sisa waktunya sedikit lebih terang daripada kalimat di sekitarnya:
      itu satu-satunya bagian yang menentukan apakah kode ini masih layak
      dibagikan. */
+  /* Penanda jenis: kecil, tapi ia satu-satunya yang membedakan dua kode yang
+     bentuknya persis sama. */
+  .kode-jenis {
+    padding: 2px 8px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--brand-orange);
+    background: color-mix(in srgb, var(--brand-orange) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--brand-orange) 36%, transparent);
+    border-radius: var(--r-pill);
+    white-space: nowrap;
+  }
   .kode-baris .kode-nota b {
     color: var(--text-muted);
   }
@@ -1584,6 +1598,10 @@ const IKON_FOTO = `<svg viewBox="0 0 16 16" fill="none" aria-hidden="true" style
 /* Panah melingkar: "buat ulang". Tanpa teks, bentuk inilah satu-satunya
    penjelas — jadi lingkarannya dibiarkan hampir penuh dengan satu mata panah,
    bukan dua busur kecil yang di ukuran 15 px terbaca seperti noda. */
+const IKON_SILANG = `<svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+  <path d="m4.5 4.5 7 7m0-7-7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+</svg>`;
+
 const IKON_ULANG = `<svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
   <path d="M13.2 8a5.2 5.2 0 1 1-1.6-3.7" stroke="currentColor" stroke-width="1.6"
         stroke-linecap="round" />
@@ -1635,6 +1653,7 @@ export class TeamDetail extends BaseElement {
     this._mode = 'lihat'; // 'lihat' (verifikasi) | 'berkas' (logo & ID card) | 'foto'
     this._kodeTim = null; // { memuat } | { kode, sampai } | { galat } — khusus admin
     this._kodeMemuat = false; // permintaan keadaan kode sedang berjalan
+    this._pilihJenis = false; // dua pilihan jenis sedang ditampilkan
     this._kodeSibuk = false; // tombol "Buat kode" sedang bekerja
     this._idcard = {}; // cache pratinjau per playerId
     // Pratinjau LOKAL berkas yang baru dipilih, sebelum/selagi dikirim.
@@ -1663,7 +1682,11 @@ export class TeamDetail extends BaseElement {
     const admin = adalahAdmin();
     // PIC tim: boleh menyunting, tapi hanya timnya sendiri dan hanya sebagian.
     const timSendiri = adalahTim() && bolehSuntingTim(team.team_id);
-    const bolehUbah = admin || timSendiri;
+    // Roster terkunci menutup penyuntingan peserta — termasuk pemegang kode
+    // "ubah + unggah". GAS sudah menolaknya; tombolnya disembunyikan di sini
+    // supaya penolakan itu tidak datang sebagai kegagalan simpan setelah
+    // seseorang selesai mengetik.
+    const bolehUbah = admin || (timSendiri && !caborTerkunci(team.game));
     // ID card tim lain tidak akan dikirim GAS, jadi jangan diminta sama sekali.
     const bolehIdCard = bolehLihatIdCard(team.team_id);
 
@@ -1691,7 +1714,8 @@ export class TeamDetail extends BaseElement {
     // siapa pun bisa membukanya lalu menempelkan kode; kini kodenya sudah
     // dipakai saat masuk, jadi tidak ada gunanya membuka layar yang pasti
     // ditolak GAS. Alamat yang diketik tangan pun jatuh ke layar verifikasi.
-    const bolehUnggah = admin || timSendiri;
+    // Menyunting menuntut kode 'penuh'; mengunggah cukup dengan kode mana pun.
+    const bolehUnggah = bolehUnggahTim(team.team_id);
     const unggah = this._mode === 'berkas' && bolehUnggah;
     const foto = this._mode === 'foto' && bolehUnggah;
     // Berkas yang sudah dipilih tapi belum terkirim. Angkanya dipakai bilah
@@ -1827,7 +1851,7 @@ export class TeamDetail extends BaseElement {
    */
   /** Pemberitahuan bahwa roster terkunci, di layar unggah mana pun. */
   _pitaTerkunci(admin) {
-    if (!caborTerkunci()) return '';
+    if (!caborTerkunci(this._team?.game)) return '';
     return `
       <p class="terkunci roster">
         <b>Roster cabor ini sudah dikunci panitia.</b>
@@ -1845,7 +1869,7 @@ export class TeamDetail extends BaseElement {
     // belum menekan Simpan.
     const adaLogo = Boolean(team.logo_url) || this._adaLogoDipilih();
     // Terkunci -> seluruh tombol unggah mati untuk non-admin.
-    const mati = !admin && caborTerkunci();
+    const mati = !admin && caborTerkunci(team.game);
     const kunciLogo = this._kunciPilihan('logo', team.team_id);
     return `
       <section class="berkas">
@@ -2005,7 +2029,7 @@ export class TeamDetail extends BaseElement {
    */
   _bagianFoto(team, members, admin, timSendiri = false) {
     const sudah = members.filter((m) => m.has_foto).length;
-    const mati = !admin && caborTerkunci();
+    const mati = !admin && caborTerkunci(team.game);
     const kunciFotoTim = this._kunciPilihan('foto', team.team_id);
     return `
       <section class="berkas">
@@ -2119,12 +2143,12 @@ export class TeamDetail extends BaseElement {
         <div class="pj-grup">
           <h3>Kode tim</h3>
           <div class="kode-baris">
-            <button class="kode-buat" type="button" data-act="buat-kode"
-                    title="Kode berlaku 6 jam sejak dibuat"
-                    ${this._kodeSibuk ? 'disabled' : ''}>
-              ${this._kodeSibuk ? 'Membuat…' : 'Buat kode tim'}
-            </button>
-            <span class="kode-nota">${k?.galat ? esc(k.galat) : 'belum ada kode aktif'}</span>
+            ${this._tombolBuatKode('Buat kode tim')}
+            ${
+              this._pilihJenis
+                ? ''
+                : `<span class="kode-nota">${k?.galat ? esc(k.galat) : 'belum ada kode aktif'}</span>`
+            }
           </div>
         </div>`;
     }
@@ -2162,16 +2186,55 @@ export class TeamDetail extends BaseElement {
                keduanya tersedia saat benar-benar dibutuhkan: pada detik
                seseorang menimbang menekannya. */
             adaKode
-              ? `<button class="kode-mata" type="button" data-act="buat-kode"
-                         aria-label="Buat ulang kode tim"
-                         title="Buat ulang kode tim — berlaku ${esc(sisa)} lagi, membuat ulang membatalkan yang sekarang"
-                         ${this._kodeSibuk ? 'disabled' : ''}>
-                   ${IKON_ULANG}
-                 </button>`
+              ? `<span class="kode-jenis">${
+                   k.jenis === JENIS_KODE.PENUH ? 'ubah + unggah' : 'unggah saja'
+                 }</span>
+                 ${this._tombolBuatKode('')}`
               : ''
           }
         </div>
       </div>`;
+  }
+
+  /**
+   * Tombol pembuat kode — dan dua pilihannya begitu ditekan.
+   *
+   * Pilihannya muncul di tempat, bukan lewat lapisan penuh layar: keputusannya
+   * kecil (dua kemungkinan), dan panel ini hanya dua baris. Label kosong berarti
+   * bentuk ikon, dipakai saat kode sudah ada dan yang diminta adalah membuat
+   * ulang.
+   */
+  _tombolBuatKode(label) {
+    if (this._kodeSibuk) {
+      return label
+        ? '<button class="kode-buat" type="button" disabled>Membuat…</button>'
+        : '<button class="kode-mata" type="button" disabled>' + IKON_ULANG + '</button>';
+    }
+
+    if (this._pilihJenis) {
+      return `
+        <button class="kode-buat" type="button" data-act="buat-kode-penuh"
+                title="Membetulkan nick, ID game, server; menambah pemain; plus unggah berkas. Berlaku 6 jam.">
+          Ubah + unggah
+        </button>
+        <button class="kode-buat" type="button" data-act="buat-kode-unggah"
+                title="Hanya mengunggah logo, ID card, dan foto. Berlaku 6 jam.">
+          Unggah saja
+        </button>
+        <button class="kode-mata" type="button" data-act="batal-pilih-kode"
+                aria-label="Batal membuat kode" title="Batal">
+          ${IKON_SILANG}
+        </button>`;
+    }
+
+    return label
+      ? `<button class="kode-buat" type="button" data-act="pilih-jenis-kode"
+                 title="Kode berlaku 6 jam sejak dibuat">${esc(label)}</button>`
+      : `<button class="kode-mata" type="button" data-act="pilih-jenis-kode"
+                 aria-label="Buat ulang kode tim"
+                 title="Buat ulang kode — membuat ulang membatalkan yang sekarang">
+           ${IKON_ULANG}
+         </button>`;
   }
 
   /**
@@ -2181,15 +2244,16 @@ export class TeamDetail extends BaseElement {
    * permintaan admin dan memang untuk dibacakan ke PIC — menyembunyikannya lagi
    * hanya menambah satu klik tanpa menambah keamanan apa pun.
    */
-  async _buatKode() {
+  async _buatKode(jenis) {
     const team = this._team;
     if (!team || this._kodeSibuk) return;
 
     this._kodeSibuk = true;
+    this._pilihJenis = false;
     this.render();
     try {
-      const hasil = await buatKodeTim(team.team_id);
-      this._kodeTim = { kode: hasil.kode, sampai: hasil.sampai };
+      const hasil = await buatKodeTim(team.team_id, jenis);
+      this._kodeTim = { kode: hasil.kode, jenis: hasil.jenis, sampai: hasil.sampai };
       this._kodeTampil = true;
       this._kodeSibuk = false;
       this.render();
@@ -2222,7 +2286,11 @@ export class TeamDetail extends BaseElement {
     try {
       const daftar = await ambilKodeTim({ teamId: team.team_id });
       // Daftar kosong = belum ada kode aktif. Bukan galat.
-      this._kodeTim = { kode: daftar[0]?.kode || '', sampai: daftar[0]?.sampai || 0 };
+      this._kodeTim = {
+        kode: daftar[0]?.kode || '',
+        jenis: daftar[0]?.jenis || '',
+        sampai: daftar[0]?.sampai || 0,
+      };
     } catch (error) {
       this._kodeTim = { galat: error.message || 'Gagal mengambil kode' };
     }
@@ -2254,7 +2322,11 @@ export class TeamDetail extends BaseElement {
     try {
       const daftar = await ambilKodeTim({ teamId: team.team_id });
       // Daftar kosong berarti belum ada kode aktif — bukan galat.
-      this._kodeTim = { kode: daftar[0]?.kode || '', sampai: daftar[0]?.sampai || 0 };
+      this._kodeTim = {
+        kode: daftar[0]?.kode || '',
+        jenis: daftar[0]?.jenis || '',
+        sampai: daftar[0]?.sampai || 0,
+      };
       this._kodeTampil = true;
     } catch (error) {
       this._kodeTim = { galat: error.message || 'Gagal mengambil kode' };
@@ -2769,6 +2841,7 @@ export class TeamDetail extends BaseElement {
           this._idcard = {};
           this._kodeTim = null;
           this._kodeMemuat = false;
+          this._pilihJenis = false;
           this._kodeTampil = false;
           this._lepasPilihan();
         }
@@ -2820,8 +2893,22 @@ export class TeamDetail extends BaseElement {
         return;
       }
 
-      if (event.target.closest('[data-act="buat-kode"]')) {
-        this._buatKode();
+      if (event.target.closest('[data-act="buat-kode-penuh"]')) {
+        this._buatKode(JENIS_KODE.PENUH);
+        return;
+      }
+      if (event.target.closest('[data-act="buat-kode-unggah"]')) {
+        this._buatKode(JENIS_KODE.UNGGAH);
+        return;
+      }
+      if (event.target.closest('[data-act="pilih-jenis-kode"]')) {
+        this._pilihJenis = true;
+        this.render();
+        return;
+      }
+      if (event.target.closest('[data-act="batal-pilih-kode"]')) {
+        this._pilihJenis = false;
+        this.render();
         return;
       }
 
@@ -3137,7 +3224,7 @@ export class TeamDetail extends BaseElement {
   _pilihBerkas(kind, playerId = null) {
     // Roster terkunci: Kode Tim berhenti berlaku. Ditahan di sini supaya tidak
     // ada berkas yang dikompres dan dikirim hanya untuk ditolak GAS.
-    if (!adalahAdmin() && caborTerkunci()) {
+    if (!adalahAdmin() && caborTerkunci(this._team?.game)) {
       this._pesan('Roster cabor ini sudah dikunci panitia — Kode Tim tidak berlaku lagi.', 'galat');
       return;
     }
@@ -3225,7 +3312,7 @@ export class TeamDetail extends BaseElement {
     // Wewenangnya sudah dibuktikan sesi; tidak ada kode yang perlu dibaca dari
     // layar. Kalau sesinya tidak berhak, GAS yang menolak — dan pesannya
     // diteruskan apa adanya ke bilah pesan.
-    if (!adalahAdmin() && !bolehSuntingTim(team.team_id)) {
+    if (!bolehUnggahTim(team.team_id)) {
       batal();
       this._pesan('Masuk dulu dengan Kode Tim tim ini untuk mengunggah berkas.', 'galat');
       return;

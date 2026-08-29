@@ -13,7 +13,7 @@ import { BaseElement, define } from '../core/element.js';
 import { css } from '../core/css.js';
 import { esc, jamMenit, normalize, num, sisaWaktu } from '../core/format.js';
 import { caborTerkunci, setShowCodes, setTerkunci, store } from '../data/app-state.js';
-import { ambilKodeTim, aturKunciRoster } from '../data/auth.js';
+import { ambilKodeTim, aturKunciRoster, resetKodeTim } from '../data/auth.js';
 import { GAME_META } from '../data/source.js';
 
 const styles = css`
@@ -145,6 +145,10 @@ const styles = css`
     background: var(--surface);
     border: 1px solid var(--border-strong);
     border-radius: var(--r-sm);
+  }
+  .pita-kunci button.bahaya {
+    color: var(--peringatan);
+    border-color: color-mix(in srgb, var(--peringatan) 45%, transparent);
   }
   .pita-kunci button.utama {
     color: #10203f;
@@ -438,6 +442,8 @@ export class CodeList extends BaseElement {
    * berhenti berlaku. Menaruhnya berjauhan akan menyembunyikan hubungan itu.
    */
   _pitaKunci(meta) {
+    if (this._konfirmasiReset) return this._pitaReset();
+
     const game = store.state.filters.game;
     const info = store.state.meta?.terkunci?.[game];
     const terkunci = Boolean(info);
@@ -474,7 +480,52 @@ export class CodeList extends BaseElement {
           }
         </span>
         <button type="button" data-act="minta-kunci">${terkunci ? 'Buka kunci' : 'Kunci roster'}</button>
+        ${
+          /* Reset berdiri di samping kunci karena keduanya menutup akses
+             peserta — bedanya, mengunci menghentikan SEMENTARA seluruh cabor
+             ini, sedangkan reset membatalkan kode yang sudah terlanjur
+             dibagikan (seluruh cabor) tanpa menutup apa pun. */
+          this._data?.length
+            ? `<button type="button" class="bahaya" data-act="minta-reset">
+                 Reset kode
+               </button>`
+            : ''
+        }
       </div>`;
+  }
+
+  /** Konfirmasi reset seluruh Kode Tim aktif. */
+  _pitaReset() {
+    const jumlah = this._data?.length || 0;
+    return `
+      <div class="pita-kunci konfirmasi">
+        <span class="pita-teks">
+          <b>Batalkan ${num(jumlah)} Kode Tim yang aktif?</b>
+          Berlaku untuk SELURUH cabor, bukan hanya yang sedang dibuka. PIC yang
+          sedang memakainya langsung terputus, dan kode baru harus dibagikan ulang.
+        </span>
+        <button type="button" data-act="batal-reset">Batal</button>
+        <button type="button" class="utama" data-act="ya-reset" ${this._sibuk ? 'disabled' : ''}>
+          ${this._sibuk ? 'Mereset…' : 'Ya, reset'}
+        </button>
+      </div>`;
+  }
+
+  async _terapkanReset() {
+    this._sibuk = true;
+    this.render();
+    try {
+      const dihapus = await resetKodeTim();
+      this._galat = '';
+      // Daftarnya memang jadi kosong — itu seluruh isi halaman ini.
+      this._data = [];
+      this._pesanReset = `${dihapus} Kode Tim dibatalkan.`;
+    } catch (error) {
+      this._galat = error.message || 'Gagal mereset Kode Tim.';
+    }
+    this._sibuk = false;
+    this._konfirmasiReset = false;
+    this.render();
   }
 
   _isi(baris) {
@@ -482,8 +533,8 @@ export class CodeList extends BaseElement {
     if (!this._data) return '<div class="status">Mengambil kode tim…</div>';
     if (!this._data.length) {
       return `<div class="status">
-                Belum ada Kode Tim yang aktif. Kode dibuat dari halaman detail tim
-                dan berlaku 6 jam.
+                ${this._pesanReset ? `${esc(this._pesanReset)} ` : ''}Belum ada Kode Tim yang aktif.
+                Kode dibuat dari halaman detail tim atau menu ⋮ di daftar tim, dan berlaku 6 jam.
               </div>`;
     }
     if (!baris.length) {
@@ -565,6 +616,21 @@ export class CodeList extends BaseElement {
         setShowCodes(false);
         return;
       }
+      if (event.target.closest('[data-act="minta-reset"]')) {
+        this._konfirmasiReset = true;
+        this.render();
+        return;
+      }
+      if (event.target.closest('[data-act="batal-reset"]')) {
+        this._konfirmasiReset = false;
+        this.render();
+        return;
+      }
+      if (event.target.closest('[data-act="ya-reset"]')) {
+        this._terapkanReset();
+        return;
+      }
+
       if (event.target.closest('[data-act="minta-kunci"]')) {
         this._konfirmasi = true;
         this.render();

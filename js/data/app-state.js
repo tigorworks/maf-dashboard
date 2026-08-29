@@ -113,9 +113,16 @@ export function applyUpload(teamId, patch) {
   }));
 }
 
-/** Apakah roster cabor yang sedang dibuka sudah dikunci panitia. */
-export function caborTerkunci(state = store.state) {
-  const game = state.filters.game;
+/**
+ * Apakah roster satu cabor sudah dikunci panitia?
+ *
+ * Kunci berlaku PER CABOR — MLBB bisa terkunci sementara PUBG masih terbuka —
+ * jadi cabornya disebut, bukan disimpulkan. Bawaannya cabor yang sedang dipilih
+ * karena itulah yang benar untuk header dan daftar tim; halaman tim mengirim
+ * cabor TIMNYA sendiri, supaya jawabannya tidak bergantung pada penyaring yang
+ * kebetulan aktif.
+ */
+export function caborTerkunci(game = store.state.filters.game, state = store.state) {
   return Boolean(game && state.meta?.terkunci?.[game]);
 }
 
@@ -128,7 +135,9 @@ export function setAuth(sesi) {
   // teamId ikut disimpan supaya komponen yang membaca store (bukan modul auth)
   // tahu tim mana yang boleh disunting oleh sesi peran 'tim'.
   store.set({
-    auth: sesi ? { nama: sesi.nama, peran: sesi.peran, teamId: sesi.teamId || '' } : null,
+    auth: sesi
+      ? { nama: sesi.nama, peran: sesi.peran, teamId: sesi.teamId || '', jenis: sesi.jenis || '' }
+      : null,
   });
 }
 

@@ -287,12 +287,20 @@ export class AppHeader extends BaseElement {
   static styles = [styles];
 
   render() {
-    const { meta, filters, auth } = store.state;
+    const { meta, filters, auth, phase } = store.state;
+    // Selagi data dimuat, kendali sesi disembunyikan seluruhnya.
+    //
+    // Alasannya bukan kerapian: sesi dipulihkan dari cookie lewat perjalanan
+    // jaringan tersendiri, jadi pada detik-detik pertama `auth` masih null
+    // walaupun penggunanya sebenarnya sudah masuk. Menampilkan tombol "Masuk"
+    // di saat itu memberi kabar yang salah — dan siapa pun yang menekannya akan
+    // membuka dialog untuk sesi yang sedang dipulihkan.
+    const memuat = phase === 'loading';
     const game = filters.game ? GAME_META[filters.game] : null;
     const tone = auth?.peran === PERAN.ADMIN ? 'var(--brand-gold, #ffc400)' : 'var(--game-mlbb)';
     // Kode tim hanya berarti kalau ada cabor yang sedang dibuka — daftarnya
     // memang per cabor.
-    const bisaLihatKode = auth?.peran === PERAN.ADMIN && Boolean(filters.game);
+    const bisaLihatKode = !memuat && auth?.peran === PERAN.ADMIN && Boolean(filters.game);
     this.shadowRoot.innerHTML = `
       <div class="bar">
         <div class="brand">
@@ -306,7 +314,7 @@ export class AppHeader extends BaseElement {
         <div class="spacer"></div>
 
         ${
-          game
+          game && !memuat
             ? `<button class="cabor" type="button" data-action="swap-game"
                        style="--tone:${game.color}" title="Ganti cabang olahraga">
                  <img src="${esc(game.logo)}" alt="" />${esc(game.label)}
@@ -319,7 +327,7 @@ export class AppHeader extends BaseElement {
         }
 
         ${
-          caborTerkunci(store.state)
+          caborTerkunci()
             ? `<span class="terkunci-chip" title="Roster cabor ini dikunci — Kode Tim tidak berlaku">
                  <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
                    <rect x="3" y="7" width="10" height="7" rx="1.8" stroke="currentColor" stroke-width="1.5" />
@@ -351,7 +359,9 @@ export class AppHeader extends BaseElement {
         }
 
         ${
-          auth
+          memuat
+            ? ''
+            : auth
             ? `<div class="sesi" style="--peran-tone:${tone}">
                  <span class="peran">${esc(auth.peran)}</span>
                  <span class="nama">${esc(auth.nama)}</span>
