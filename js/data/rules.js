@@ -11,6 +11,8 @@
  * mengikat (mis. logo wajib sebelum ID card) hidup di alur unggahan.
  */
 
+import { nickBermasalah } from './nick.js';
+
 /** Batas pemain berstatus TAD dalam satu tim. */
 export const MAKS_TAD = 3;
 
@@ -49,6 +51,20 @@ export function periksaTim(team) {
       kode: 'idcard',
       label: `ID ${berIdCard}/${anggota.length}`,
       pesan: `ID card baru ${berIdCard} dari ${anggota.length} pemain`,
+    });
+  }
+
+  // Format nick: inisial kontingen + titik. Diringkas jadi satu masalah per
+  // tim — daftar nama yang melanggar ada di panel timnya, bukan di baris tabel.
+  const nick = nickBermasalah(team);
+  if (nick.length) {
+    masalah.push({
+      kode: 'nick',
+      label: `Nick ${nick.length}`,
+      pesan:
+        nick.length === 1
+          ? `1 nick belum sesuai format: ${nick[0].full_name || nick[0].game_nick || 'pemain'}`
+          : `${nick.length} nick belum sesuai format inisial kontingen`,
     });
   }
 

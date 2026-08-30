@@ -24,6 +24,7 @@ import {
   bolehSuntingTim, bolehUnggahTim, buatKodeTim, JENIS_KODE, onAuth, sesiSekarang, simpanRoster,
 } from '../data/auth.js';
 import { periksaTim } from '../data/rules.js';
+import { periksaNick } from '../data/nick.js';
 
 const styles = css`
   /* Halaman penuh, bukan dialog. Verifikasi satu tim adalah pekerjaan yang
@@ -1086,6 +1087,66 @@ const styles = css`
     line-height: 1.15;
     overflow-wrap: anywhere;
   }
+  /* Nick yang belum sesuai format: warna peringatan plus tanda seru kecil.
+     Warna saja tidak cukup — sebagian orang tidak membedakannya. */
+  .kotak-game .val.nick.salah {
+    color: var(--peringatan);
+  }
+  /* Hint milik sendiri, bukan atribut title.
+     title bawaan peramban baru muncul setelah jeda sekitar satu detik, ukuran
+     dan warnanya tidak bisa diatur, dan di layar sentuh ia tidak pernah muncul
+     sama sekali. Yang ini tampil SEKETIKA saat kursor masuk — tanpa transisi,
+     tanpa tunda — dan ukurannya seukuran teks biasa supaya benar-benar terbaca. */
+  /* Dijangkarkan ke KARTUNYA, bukan ke sel nick.
+     Kartu pemain memakai overflow: hidden, jadi hint yang menggantung di bawah
+     kotak game akan terpotong pada kartu yang pendek — misalnya milik pengunjung
+     yang belum masuk, yang tidak punya blok ID card. Dipatok ke tepi bawah
+     kartu, lebarnya selalu selebar kartu dan tidak ada yang bisa terpotong. */
+  .nick-hint {
+    position: absolute;
+    left: var(--sp-3);
+    right: var(--sp-3);
+    bottom: var(--sp-3);
+    z-index: 3;
+    padding: var(--sp-2) var(--sp-3);
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    line-height: 1.45;
+    color: var(--peringatan);
+    background: var(--surface-2);
+    border: 1px solid color-mix(in srgb, var(--peringatan) 45%, transparent);
+    border-radius: var(--r-sm);
+    box-shadow: var(--shadow-md);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  /* Seluruh sel nick jadi pemicunya, bukan hanya tanda serunya: sasaran sebesar
+     15 px terlalu kecil untuk diburu kursor. Fokus papan ketik ikut memicunya. */
+  .bagian.ada-hint:hover .nick-hint,
+  .bagian.ada-hint:focus-within .nick-hint {
+    opacity: 1;
+    visibility: visible;
+  }
+  .nick-tanda:focus-visible {
+    outline: 2px solid var(--peringatan);
+    outline-offset: 2px;
+    border-radius: 50%;
+  }
+  .nick-tanda {
+    display: inline-grid;
+    place-items: center;
+    width: 15px;
+    height: 15px;
+    margin-left: 5px;
+    font-size: 10px;
+    font-style: normal;
+    font-weight: 900;
+    color: var(--peringatan);
+    border: 1.5px solid var(--peringatan);
+    border-radius: 50%;
+    vertical-align: middle;
+  }
   .kotak-game .val.nick {
     color: var(--accent);
   }
@@ -2132,23 +2193,21 @@ export class TeamDetail extends BaseElement {
     // Kode yang sudah lewat waktunya diperlakukan sama dengan tidak ada.
     const adaKode = Boolean(k?.kode) && Boolean(sisa);
 
-    // Belum ada kode: yang ditampilkan HANYA tombol pembuatnya.
+    // Tidak ada kode yang hidup: yang tampil HANYA tombol pembuatnya.
     //
-    // Menampilkan baris kode kosong berisi "—" beserta tombol mata dan tombol
-    // salin yang keduanya mati hanya menyodorkan tiga kendali yang tidak bisa
-    // dipakai, dan membuat panitia mengira ada kode yang gagal dimuat. Yang
-    // benar-benar bisa dilakukan di keadaan ini cuma satu.
-    if (!adaKode && !k?.memuat) {
+    // Titik-titik penyamar dan tombol mata muncul kalau — dan hanya kalau — ada
+    // yang bisa disamarkan. Menampilkannya saat kosong menyodorkan kendali yang
+    // tidak bisa ditekan, dan membuat panitia mengira ada kode yang gagal
+    // dimuat. Keadaan "sedang mengambil" ikut ke cabang ini karena alasan yang
+    // sama: saat itu pun belum ada kode.
+    if (!adaKode) {
+      const nota = k?.memuat ? 'memeriksa kode aktif…' : k?.galat ? k.galat : 'belum ada kode aktif';
       return `
         <div class="pj-grup">
           <h3>Kode tim</h3>
           <div class="kode-baris">
-            ${this._tombolBuatKode('Buat kode tim')}
-            ${
-              this._pilihJenis
-                ? ''
-                : `<span class="kode-nota">${k?.galat ? esc(k.galat) : 'belum ada kode aktif'}</span>`
-            }
+            ${k?.memuat ? '' : this._tombolBuatKode('Buat kode tim')}
+            ${this._pilihJenis ? '' : `<span class="kode-nota">${esc(nota)}</span>`}
           </div>
         </div>`;
     }
@@ -2158,12 +2217,9 @@ export class TeamDetail extends BaseElement {
         <h3>Kode tim</h3>
         <div class="kode-baris">
           <span class="kode-nilai ${terbuka ? 'terbuka' : ''}">
-            ${
-              k?.memuat ? 'Mengambil…' : terbuka ? esc(k.kode) : '•'.repeat(panjang)
-            }
+            ${terbuka ? esc(k.kode) : '•'.repeat(panjang)}
           </span>
           <button class="kode-mata" type="button" data-act="lihat-kode"
-                  ${k?.memuat || !adaKode ? 'disabled' : ''}
                   title="${terbuka ? 'Sembunyikan kode' : 'Tampilkan kode tim'}"
                   aria-pressed="${terbuka}"
                   aria-label="${terbuka ? 'Sembunyikan kode tim' : 'Tampilkan kode tim'}">
@@ -2383,6 +2439,10 @@ export class TeamDetail extends BaseElement {
 
   _card(member, slot, { sesi, admin }) {
     const nick = member.game_nick || '';
+    // Nick wajib berformat "INISIAL. NAMA". Ditandai di kartunya sendiri, bukan
+    // hanya dihitung di lencana tabel: yang memperbaikinya perlu tahu SIAPA.
+    const hasilNick = periksaNick(nick);
+    const nickSalah = hasilNick.ok ? '' : hasilNick.pesan;
     const nama = member.full_name || nick || '—';
     const tone = STATUS_TONE[member.status] || 'var(--text-muted)';
     const pid = member.player_id || '';
@@ -2404,9 +2464,18 @@ export class TeamDetail extends BaseElement {
         </div>
 
         <div class="kotak-game">
-          <div class="bagian">
+          <div class="bagian ${nickSalah ? 'ada-hint' : ''}">
             <span class="lbl">Nick Game</span>
-            <span class="val nick">${esc(nick || '—')}</span>
+            <span class="val nick ${nickSalah ? 'salah' : ''}">
+              ${esc(nick || '—')}
+              ${
+                nickSalah
+                  ? `<i class="nick-tanda" tabindex="0" role="img"
+                        aria-label="${esc(nickSalah)}">!</i>`
+                  : ''
+              }
+            </span>
+            ${nickSalah ? `<span class="nick-hint" role="tooltip">${esc(nickSalah)}</span>` : ''}
           </div>
           <div class="garis"></div>
           <div class="bagian">
