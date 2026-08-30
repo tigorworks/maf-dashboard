@@ -20,7 +20,15 @@ const styles = css`
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--r-md);
-    overflow: hidden;
+    /* clip, BUKAN hidden.
+       Keduanya sama-sama memotong isi di sudut membulat, tapi hidden membentuk
+       kotak gulir — dan kepala tabel yang sticky akan menempel pada kotak itu,
+       bukan pada halaman. Karena kotak itu sendiri tidak pernah bergulir,
+       kepalanya ikut hanyut ke atas dan tidak pernah menempel.
+       clip memotong tanpa membentuk kotak gulir, sehingga sticky kembali
+       mengacu ke viewport. Di peramban yang tidak mengenalnya, deklarasi ini
+       diabaikan: sudutnya tidak terpotong, tapi tidak ada yang rusak. */
+    overflow: clip;
   }
   /* Watermark logo MAF DI DALAM panel tabel. Watermark di lapisan halaman nyaris
      tak terlihat karena konten menutupi hampir seluruh lebar layar; dilukis di
@@ -44,12 +52,14 @@ const styles = css`
     position: relative;
     z-index: 1;
   }
-  /* Area tabel discroll sendiri (bukan halaman) supaya thead sticky benar-benar
-     menempel dan bar pagination tetap terlihat di bawah. */
+  /* Tabel TIDAK punya gulirannya sendiri; yang bergulir adalah halaman.
+     Dulu area ini dibatasi tingginya supaya bar pagination selalu terlihat,
+     tapi dua area gulir bersarang membingungkan — roda mouse dan sentuhan
+     mengenai yang mana bergantung posisi kursor, dan di ponsel guliran dalam
+     kerap "menangkap" jari lalu berhenti di tengah daftar. Pagination cukup
+     dicapai dengan menggulir sampai bawah, seperti halaman biasa. */
   .scroll {
-    max-height: clamp(380px, calc(100vh - 250px), 920px);
-    overflow: auto;
-    overscroll-behavior: contain;
+    overflow: visible;
   }
   table {
     width: 100%;
@@ -63,9 +73,14 @@ const styles = css`
     text-align: left;
     white-space: nowrap;
   }
+  /* Kepala tabel tetap menempel — tapi kini ke VIEWPORT, bukan ke kotak gulir
+     yang sudah tidak ada. Offsetnya setinggi header aplikasi yang juga sticky;
+     tanpa itu, kepala tabel akan berhenti tepat di belakangnya dan tidak
+     terbaca. z-index-nya dibiarkan di bawah header (30) supaya header tetap
+     menang saat keduanya bertemu. */
   thead th {
     position: sticky;
-    top: 0;
+    top: var(--header-h);
     z-index: 2;
     font-size: var(--fs-xs);
     font-weight: 700;
@@ -534,10 +549,6 @@ const styles = css`
 
   /* --- Mode kartu untuk layar sempit --- */
   @media (max-width: 900px) {
-    .scroll {
-      max-height: none;
-      overflow: visible;
-    }
     thead {
       display: none;
     }
