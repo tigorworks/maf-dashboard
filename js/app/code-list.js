@@ -14,11 +14,10 @@
  */
 import { BaseElement, define } from '../core/element.js';
 import { css } from '../core/css.js';
-import { esc, jamMenit, normalize, num, sisaWaktu } from '../core/format.js';
+import { esc, jamMenit, normalize, normalKontingen, num, sisaWaktu } from '../core/format.js';
 import { caborTerkunci, setShowCodes, setTerkunci, store } from '../data/app-state.js';
 import {
-  ambilKodeTim, aturKunciRoster, buatKodeSemua, JENIS_KODE, namaJenis, normalKontingen,
-  resetKodeTim,
+  ambilKodeTim, aturKunciRoster, buatKodeSemua, JENIS_KODE, namaJenis, resetKodeTim, UMUR_KODE,
 } from '../data/auth.js';
 import { GAME_META } from '../data/source.js';
 
@@ -573,7 +572,7 @@ export class CodeList extends BaseElement {
             adaLama
               ? `${num(adaLama)} kode yang sekarang beredar ikut diganti dan langsung berhenti berlaku. `
               : ''
-          }Semuanya berlaku 6 jam sejak dibuat. Wewenang <b>hapus tim</b> tidak
+          }Semuanya berlaku ${UMUR_KODE} sejak dibuat. Wewenang <b>hapus tim</b> tidak
           dibagikan massal — buatkan per kontingen dari detail tim bila ada yang
           membatalkan tim. Pilih wewenangnya:
         </span>
@@ -610,7 +609,7 @@ export class CodeList extends BaseElement {
       // Daftarnya dibaca ulang, bukan dirakit dari jawaban: hanya daftarKode
       // yang tahu cakupan tiap kontingen (berapa tim, cabor apa) dan kontaknya.
       await this._muat();
-      this._pesanAksi = `${hasil.dibuat} kode dibuat untuk seluruh kontingen, berlaku 6 jam.`;
+      this._pesanAksi = `${hasil.dibuat} kode dibuat untuk seluruh kontingen, berlaku ${UMUR_KODE}.`;
     } catch (error) {
       this._galat = error.message || 'Gagal membuat kode.';
     }
@@ -661,7 +660,7 @@ export class CodeList extends BaseElement {
       return `<div class="status">
                 ${this._pesanReset ? `${esc(this._pesanReset)} ` : ''}Belum ada kode yang aktif.
                 Kode dibuat dari halaman detail tim, menu ⋮ di daftar tim, atau tombol
-                “Buat kode semua kontingen” di atas — dan berlaku 6 jam.
+                “Buat kode semua kontingen” di atas — dan berlaku ${UMUR_KODE}.
               </div>`;
     }
     if (!baris.length) {

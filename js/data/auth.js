@@ -12,6 +12,7 @@
  * Timer di browser tidak pernah menjadi dasar wewenang — menghapusnya lewat
  * DevTools tidak memberi hak apa pun.
  */
+import { normalKontingen } from '../core/format.js';
 import { GAS_URL } from './source.js';
 
 const COOKIE = 'maf_sesi';
@@ -33,6 +34,24 @@ export const PERAN = { ADMIN: 'admin', RELAWAN: 'relawan', TIM: 'tim' };
  * yang terhapus tidak bisa didaftarkan ulang oleh PIC-nya sama sekali.
  */
 export const JENIS_KODE = { UNGGAH: 'unggah', PENUH: 'penuh', HAPUS: 'hapus' };
+
+/**
+ * Umur Kode Tim, dalam jam. HARUS sama dengan CONFIG.KODE_TIM_TTL_MS di Code.gs.
+ *
+ * Ditulis di satu tempat karena angkanya muncul di delapan kalimat yang tersebar
+ * di tiga layar — tooltip pemilih jenis, pita konfirmasi buat-semua, keadaan
+ * kosong halaman Kode Tim. Saat angkanya diubah, yang mudah terjadi bukan lupa
+ * mengubah GAS-nya, melainkan lupa mengubah salah satu dari delapan kalimat itu,
+ * sehingga layar menjanjikan umur yang berbeda dari yang sesungguhnya berlaku.
+ *
+ * Tidak dibaca dari `ttlMs` yang dikirim GAS: kalimat-kalimat itu tampil SEBELUM
+ * ada satu pun permintaan, jadi angkanya harus sudah diketahui saat merender.
+ * Kesamaannya dengan Code.gs ditegakkan oleh uji, bukan oleh ingatan.
+ */
+export const UMUR_KODE_JAM = 12;
+
+/** "12 jam" — untuk disisipkan ke kalimat di layar. */
+export const UMUR_KODE = `${UMUR_KODE_JAM} jam`;
 
 /**
  * Nama tiap jenis, satu tempat untuk seluruh layar.
@@ -140,19 +159,6 @@ export function adalahRelawan() {
 /** PIC kontingen: masuk dengan Kode Tim, wewenangnya sebatas kontingennya. */
 export function adalahTim() {
   return sesi?.peran === PERAN.TIM;
-}
-
-/**
- * Bentuk baku nama kontingen — salinan normalKontingen() di Code.gs.
- *
- * Hiasan seperti "*REGION XII*" dan spasi ganda dirapikan supaya satu kontingen
- * tidak terpecah dua hanya karena beda penulisan antarbaris spreadsheet.
- * Perbandingan di sini semata untuk TAMPILAN; yang menentukan tetap GAS, dan
- * keduanya harus merapikan dengan cara yang sama agar tombol yang terlihat
- * tidak menjanjikan sesuatu yang lalu ditolak server.
- */
-export function normalKontingen(nama) {
-  return String(nama || '').replace(/[*_]/g, ' ').replace(/\s+/g, ' ').trim().toUpperCase();
 }
 
 /** Apakah tim ini berada di kontingen yang dipegang sesi sekarang? */
@@ -420,6 +426,18 @@ export async function ambilKontak() {
 export async function resetKodeTim() {
   const hasil = await kirimTerautentikasi({ action: 'resetKode' });
   return Number(hasil.dihapus || 0);
+}
+
+/**
+ * Riwayat perubahan terakhir — siapa mengubah apa, kapan. HANYA admin.
+ *
+ * Tidak ada di payload publik dan tidak ikut cache: yang ditanyakan layar ini
+ * selalu "apa yang BARU SAJA berubah", dan riwayat yang di-cache akan basi
+ * tepat pada saat ia paling dibutuhkan.
+ */
+export async function ambilJejak({ teamId = '', batas = 0 } = {}) {
+  const hasil = await kirimTerautentikasi({ action: 'jejak', teamId, batas });
+  return { jejak: hasil.jejak || [], total: Number(hasil.total || 0) };
 }
 
 export async function hapusTim(teamId) {

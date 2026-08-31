@@ -25,6 +25,7 @@ import { GAME_META } from '../data/source.js';
    rincian, tempat ruangnya ada. */
 const SINGKAT = {
   [JENIS.MANAGER]: 'PIC ganda',
+  [JENIS.GANDA]: 'Kiriman ganda',
   [JENIS.JUMLAH]: 'Tim berlebih',
   [JENIS.KEMBAR]: 'Nama kembar',
   [JENIS.TAD]: 'TAD',
@@ -34,9 +35,17 @@ const SINGKAT = {
   [JENIS.IDCARD]: 'ID card',
 };
 
-/** Urutan mengikuti sebab-akibat: PIC ganda biasanya sumber dua yang berikutnya. */
+/**
+ * Urutan mengikuti sebab-akibat, bukan tingkat keparahan.
+ *
+ * PIC ganda biasanya sumber dari kiriman ganda, dan kiriman ganda adalah sumber
+ * paling sering dari "tim berlebih" dan "nama kembar". Dikerjakan dari atas,
+ * temuan di bawahnya sering hilang dengan sendirinya — sedangkan dikerjakan dari
+ * bawah, panitia membetulkan nama tim yang sebentar lagi dihapus.
+ */
 const URUTAN = [
   JENIS.MANAGER,
+  JENIS.GANDA,
   JENIS.JUMLAH,
   JENIS.KEMBAR,
   JENIS.TAD,
@@ -381,12 +390,24 @@ export class AuditList extends BaseElement {
 
   static styles = [styles];
 
-  /** Kelompokkan temuan ke kontingennya, terberat di atas. */
+  /**
+   * Kelompokkan temuan ke kontingennya, terberat di atas.
+   *
+   * Hanya CABOR YANG SEDANG DIBUKA. Layar ini daftar kerja, dan pekerjaannya
+   * dikerjakan per cabor: batas jumlah tim, nama kembar, dan pola nick semuanya
+   * ditegakkan per cabor, jadi mencampur MLBB dan PUBG di satu daftar memaksa
+   * pembacanya menyaring sendiri setiap baris. Cabor lain tidak hilang — ia ada
+   * di layar notifikasi cabor itu, satu ketukan dari chip cabor di header.
+   *
+   * Penyaringannya di sini, bukan di audit.js: aturan-aturannya sendiri memang
+   * harus melihat seluruh tim satu cabor sekaligus (mis. menghitung tim per
+   * kontingen), dan yang bersifat tampilan hanyalah "cabor mana yang dibaca".
+   */
   _perKontingen() {
-    // SELURUH tim, bukan hanya cabor yang sedang dipilih: pelanggaran di cabor
-    // lain tidak boleh tersembunyi karena penyaring kebetulan menunjuk ke satu.
+    const game = store.state.filters.game;
+    const tim = (store.state.teams || []).filter((t) => !game || t.game === game);
     const peta = new Map();
-    for (const t of periksaSemua(store.state.teams)) {
+    for (const t of periksaSemua(tim)) {
       const kunci = `${t.game} ${t.kontingen}`;
       if (!peta.has(kunci)) {
         peta.set(kunci, { kunci, game: t.game, kontingen: t.kontingen, temuan: [] });
@@ -408,7 +429,9 @@ export class AuditList extends BaseElement {
         <button class="kembali" type="button" data-act="kembali">
           ${IKON_KEMBALI}<span>Kembali</span>
         </button>
-        <h2>Notifikasi</h2>
+        <h2>Notifikasi${
+          store.state.filters.game ? ` ${esc(store.state.filters.game)}` : ''
+        }</h2>
         <span class="tumbuh"></span>
         ${
           total

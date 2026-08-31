@@ -36,8 +36,9 @@ export const store = createStore({
   teams: [],
   players: [],
   filters: { ...DEFAULT_FILTERS },
-  // Urutan awal menurut kontingen: verifikasi dikerjakan per kontingen, jadi
-  // tim satu kontingen harus berdampingan tanpa perlu mengurutkan manual.
+  // Urutan awal menurut kontingen, lalu tanggal daftar MENURUN (lihat
+  // PEMECAH_SERI): verifikasi dikerjakan per kontingen, jadi tim satu kontingen
+  // harus berdampingan — dan di dalamnya yang paling baru mendaftar di atas.
   sort: { key: 'kontingen', dir: 'asc' },
   page: 1,
   pageSize: PAGE_SIZE,
@@ -46,6 +47,7 @@ export const store = createStore({
   // Halaman khusus admin: daftar kode aktif, satu baris per kontingen.
   showCodes: false,
   showAudit: false,
+  showJejak: false,
   // Cerminan sesi dari data/auth.js, supaya komponen cukup berlangganan store.
   // Ini hanya untuk TAMPILAN — wewenang sesungguhnya ditegakkan GAS.
   auth: null, // null | { nama, peran }
@@ -87,6 +89,7 @@ export function clearGame() {
   store.set({
     filters: { ...DEFAULT_FILTERS }, page: 1,
     selectedTeamId: null, selectedFocus: null, showCodes: false, showAudit: false,
+    showJejak: false,
   });
 }
 
@@ -140,7 +143,10 @@ export function setTerkunci(terkunci) {
  * mundur lebih jauh daripada yang dimintanya.
  */
 export function kembaliKeDaftar() {
-  store.set({ selectedTeamId: null, selectedFocus: null, showCodes: false, showAudit: false });
+  store.set({
+    selectedTeamId: null, selectedFocus: null,
+    showCodes: false, showAudit: false, showJejak: false,
+  });
 }
 
 export function setAuth(sesi) {
@@ -229,6 +235,7 @@ export function selectTeam(teamId, focus = null) {
     selectedFocus: teamId ? focus : null,
     showCodes: false,
     showAudit: false,
+    showJejak: false,
   });
 }
 
@@ -237,6 +244,18 @@ export function setShowAudit(tampil) {
   store.set({
     showAudit: Boolean(tampil),
     showCodes: false,
+    showJejak: false,
+    selectedTeamId: null,
+    selectedFocus: null,
+  });
+}
+
+/** Buka/tutup layar jejak perubahan. Saling meniadakan dengan layar lain. */
+export function setShowJejak(tampil) {
+  store.set({
+    showJejak: Boolean(tampil),
+    showCodes: false,
+    showAudit: false,
     selectedTeamId: null,
     selectedFocus: null,
   });
@@ -246,6 +265,7 @@ export function setShowCodes(tampil) {
   store.set({
     showCodes: Boolean(tampil),
     showAudit: false,
+    showJejak: false,
     selectedTeamId: null,
     selectedFocus: null,
   });
@@ -270,15 +290,56 @@ export function filterTeams(state = store.state) {
   });
 }
 
+/**
+ * Pemecah seri per kolom: kolom mana yang menentukan urutan DI DALAM satu nilai
+ * yang sama, dan ke arah mana.
+ *
+ * Kontingen adalah kolom yang serinya paling panjang — satu kontingen bisa
+ * mengirim beberapa tim, dan tanpa pemecah seri urutannya jatuh ke urutan baris
+ * spreadsheet, yang bagi pembaca tidak berarti apa-apa.
+ *
+ * Tanggal daftar dibaca MENURUN: yang paling baru mendaftar di atas. Itu yang
+ * paling mungkin belum diperiksa panitia, sedangkan tim yang mendaftar sejak
+ * awal umumnya sudah beres — daftar yang menaruh pekerjaan terbaru di atas
+ * menghemat satu gulir setiap kali dibuka.
+ */
+const PEMECAH_SERI = {
+  kontingen: { kolom: 'submission_date', arah: 'desc' },
+};
+
+/**
+ * Bandingkan pemecah seri. Nilai kosong SELALU jatuh ke bawah, apa pun arahnya.
+ *
+ * compare() sudah menaruh yang kosong di belakang, tapi mengalikannya dengan -1
+ * untuk arah menurun akan melemparkannya ke depan — dan baris tanpa tanggal
+ * memimpin daftar adalah kebalikan dari yang dimaksud "yang terbaru di atas".
+ */
+function bandingSusulan(a, b, arah) {
+  const aKosong = a === null || a === undefined || a === '';
+  const bKosong = b === null || b === undefined || b === '';
+  if (aKosong || bKosong) return compare(a, b);
+  return compare(a, b) * (arah === 'desc' ? -1 : 1);
+}
+
 export function sortTeams(rows, sort = store.state.sort) {
   const { key, dir } = sort;
   const factor = dir === 'desc' ? -1 : 1;
-  // Sort stabil: indeks asli sebagai tie-breaker.
+  const kedua = PEMECAH_SERI[key];
+
+  // Sort stabil: indeks asli sebagai tie-breaker TERAKHIR.
   return rows
     .map((row, i) => [row, i])
     .sort((a, b) => {
-      const result = compare(a[0][key], b[0][key]);
-      return result !== 0 ? result * factor : a[1] - b[1];
+      const utama = compare(a[0][key], b[0][key]);
+      if (utama !== 0) return utama * factor;
+      if (kedua) {
+        // Arah kolom pertama TIDAK diteruskan ke sini: kolom kedua punya arahnya
+        // sendiri. Membalik urutan kontingen adalah soal urutan kontingennya,
+        // dan tidak boleh sekalian mengacak arti kolom tanggal.
+        const susulan = bandingSusulan(a[0][kedua.kolom], b[0][kedua.kolom], kedua.arah);
+        if (susulan !== 0) return susulan;
+      }
+      return a[1] - b[1];
     })
     .map(([row]) => row);
 }

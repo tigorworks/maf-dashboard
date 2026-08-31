@@ -116,3 +116,33 @@ export function jamMenit(epoch) {
   if (!epoch) return '';
   return new Date(Number(epoch)).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 }
+
+/**
+ * Nama kontingen untuk DITAMPILKAN: hiasan dibuang, hurufnya dibiarkan.
+ *
+ * Cerminan rapiKontingen() di Code.gs. Penulisan di ekspor JotForm tidak
+ * seragam — satu kontingen bisa tertulis "*REGION XII*" di satu berkas dan
+ * "REGION XII" di berkas lain — dan yang dibaca panitia tidak boleh muncul dua
+ * rupa hanya karena baris mana yang lebih dulu terbaca.
+ */
+export function rapiKontingen(nama) {
+  return String(nama || '').replace(/[*_]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Bentuk BAKU nama kontingen — kunci pembanding, bukan untuk ditampilkan.
+ *
+ * Cerminan normalKontingen() di Code.gs, dan harus tetap sama dengannya:
+ * GAS memakainya untuk memutuskan Kode Tim mana berlaku untuk tim mana, jadi
+ * kalau web mengelompokkan dengan aturan yang berbeda, layar akan bercerita lain
+ * daripada yang ditegakkan server.
+ *
+ * Tinggal di core/format.js, bukan di data/auth.js, karena pemakainya dua jenis
+ * yang tidak boleh saling bergantung: pemeriksa wewenang (auth) dan pemeriksa
+ * aturan turnamen (audit). Menaruhnya di salah satunya memaksa yang lain
+ * mengimpor modul yang tidak ada hubungannya — atau, lebih buruk, menyalin
+ * aturannya dan membiarkan keduanya menyimpang diam-diam.
+ */
+export function normalKontingen(nama) {
+  return rapiKontingen(nama).toUpperCase();
+}

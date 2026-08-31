@@ -15,6 +15,7 @@ import './app-header.js';
 import './login-dialog.js';
 import './code-list.js';
 import './audit-list.js';
+import './jejak-list.js';
 import './sport-gate.js';
 import './stat-grid.js';
 import './filter-bar.js';
@@ -47,7 +48,8 @@ const styles = css`
      membentang penuh selebar halaman. */
   main:has(team-detail),
   main:has(code-list),
-  main:has(audit-list) {
+  main:has(audit-list),
+  main:has(jejak-list) {
     padding: 0;
     gap: 0;
   }
@@ -266,6 +268,11 @@ export class AppShell extends BaseElement {
 
     if (state.showCodes) {
       if (!main.querySelector('code-list')) main.innerHTML = '<code-list></code-list>';
+      return;
+    }
+
+    if (state.showJejak) {
+      if (!main.querySelector('jejak-list')) main.innerHTML = '<jejak-list></jejak-list>';
       return;
     }
 

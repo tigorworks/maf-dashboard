@@ -7,10 +7,12 @@
  */
 import { BaseElement, define } from '../core/element.js';
 import { css } from '../core/css.js';
-import { esc, formatDate, highlight, hueOf, initials, jamMenit, num, sisaWaktu } from '../core/format.js';
+import {
+  esc, formatDate, highlight, hueOf, initials, jamMenit, normalKontingen, num, sisaWaktu,
+} from '../core/format.js';
 import { buangTim, COLUMNS, matchedMembers, selectTeam, setSort, store } from '../data/app-state.js';
 import {
-  adalahAdmin, bolehUnggahTim, buatKodeTim, hapusTim, JENIS_KODE, namaJenis, normalKontingen,
+  adalahAdmin, bolehUnggahTim, buatKodeTim, hapusTim, JENIS_KODE, namaJenis, UMUR_KODE,
 } from '../data/auth.js';
 import { periksaTim } from '../data/rules.js';
 import '../ui/ui-pagination.js';
@@ -937,7 +939,7 @@ export class TeamTable extends BaseElement {
    * Kode yang baru dibuat, ditampilkan penuh untuk dicatat atau dibacakan.
    *
    * Sengaja tidak disembunyikan di balik tombol mata seperti di halaman detail:
-   * kode ini baru saja diminta admin, umurnya 6 jam, dan satu-satunya gunanya
+   * kode ini baru saja diminta admin, umurnya terbatas, dan satu-satunya gunanya
    * memang untuk diteruskan ke PIC.
    *
    * Judulnya menyebut KONTINGEN meskipun dibuka dari baris satu tim: kodenya
@@ -957,7 +959,7 @@ export class TeamTable extends BaseElement {
           <h3>Kode kontingen ${esc(k.nama)}</h3>
           ${
             k.memilih
-              ? `<p>${cakupan} Pilih wewenang yang diberikannya — ketiganya berlaku 6 jam.</p>
+              ? `<p>${cakupan} Pilih wewenang yang diberikannya — ketiganya berlaku ${UMUR_KODE}.</p>
                  <div class="pilih-jenis">
                    <button type="button" data-act="pilih-unggah">
                      <b>Unggah berkas saja</b>
@@ -965,8 +967,9 @@ export class TeamTable extends BaseElement {
                    </button>
                    <button type="button" data-act="pilih-penuh">
                      <b>Ubah data + unggah berkas</b>
-                     <small>Membetulkan nick, ID game, server; menambah pemain; mengunggah berkas.
-                     Tidak bisa menghapus tim.</small>
+                     <small>Membetulkan nick, ID game, dan server pemain yang sudah
+                     terdaftar; mengunggah berkas. Tidak bisa menambah atau menghapus
+                     pemain, maupun menghapus tim.</small>
                    </button>
                    <button type="button" class="bahaya" data-act="pilih-hapus">
                      <b>Ubah data + hapus tim + unggah</b>

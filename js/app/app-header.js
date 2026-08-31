@@ -4,7 +4,9 @@
 import { BaseElement, define } from '../core/element.js';
 import { css } from '../core/css.js';
 import { esc, formatDate } from '../core/format.js';
-import { caborTerkunci, clearGame, setShowAudit, setShowCodes, store } from '../data/app-state.js';
+import {
+  caborTerkunci, clearGame, setShowAudit, setShowCodes, setShowJejak, store,
+} from '../data/app-state.js';
 import { periksaSemua, ringkasan } from '../data/audit.js';
 import { GAME_META } from '../data/source.js';
 import { PERAN, keluar } from '../data/auth.js';
@@ -326,7 +328,15 @@ export class AppHeader extends BaseElement {
     // Notifikasi tidak menunggu cabor dipilih: temuannya lintas cabor, dan
     // jumlahnya perlu terlihat sejak layar pertama panitia.
     const bisaLihatAudit = !memuat && auth?.peran === PERAN.ADMIN;
-    const jumlahTemuan = bisaLihatAudit ? ringkasan(periksaSemua(store.state.teams)).total : 0;
+    // Dihitung untuk CABOR YANG SEDANG DIBUKA saja, supaya angka di lonceng ini
+    // sama dengan yang nanti terbaca di layarnya. Lonceng bilang 145 lalu
+    // layarnya menampilkan 90 adalah cara tercepat membuat angkanya tidak
+    // dipercaya lagi.
+    const jumlahTemuan = bisaLihatAudit
+      ? ringkasan(periksaSemua(
+          (store.state.teams || []).filter((t) => !filters.game || t.game === filters.game)
+        )).total
+      : 0;
     this.shadowRoot.innerHTML = `
       <div class="bar">
         <div class="brand">
@@ -394,6 +404,21 @@ export class AppHeader extends BaseElement {
                </button>`
             : ''
         }
+        ${
+          /* Jejak perubahan. Ikon jam-berputar, tanpa label kecuali di layar
+             lebar: ia butir keempat di bilah yang sudah padat, dan yang paling
+             jarang ditekan dari ketiganya. */
+          bisaLihatAudit
+            ? `<button class="notif" type="button" data-action="jejak"
+                       title="Jejak perubahan — siapa mengubah apa" aria-label="Jejak perubahan">
+                 <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                   <circle cx="8" cy="8.4" r="5.6" stroke="currentColor" stroke-width="1.4" />
+                   <path d="M8 5.4v3.2l2.2 1.4" stroke="currentColor" stroke-width="1.4"
+                         stroke-linecap="round" stroke-linejoin="round" />
+                 </svg>
+               </button>`
+            : ''
+        }
 
         ${
           meta?.lastupdate
@@ -445,6 +470,10 @@ export class AppHeader extends BaseElement {
 
       if (event.target.closest('[data-action="kode-tim"]')) {
         setShowCodes(true);
+        return;
+      }
+      if (event.target.closest('[data-action="jejak"]')) {
+        setShowJejak(true);
         return;
       }
       if (event.target.closest('[data-action="keluar"]')) keluar();
