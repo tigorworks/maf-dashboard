@@ -54,8 +54,12 @@ export function periksaTim(team) {
     });
   }
 
-  // Format nick: inisial kontingen + titik. Diringkas jadi satu masalah per
-  // tim — daftar nama yang melanggar ada di panel timnya, bukan di baris tabel.
+  // Format nick: POLA inisial + pemisah + nama, dengan pemisah per cabor (titik
+  // untuk MLBB, huruf x untuk PUBG — lihat nick.js). Yang diperiksa hanya
+  // polanya; pencocokan inisial dengan kontingen sudah dilepas karena singkatan
+  // yang dipakai di lapangan beragam dan sah-sah saja. Diringkas jadi satu
+  // masalah per tim — daftar nama yang melanggar ada di panel timnya, bukan di
+  // baris tabel.
   const nick = nickBermasalah(team);
   if (nick.length) {
     masalah.push({
@@ -64,7 +68,7 @@ export function periksaTim(team) {
       pesan:
         nick.length === 1
           ? `1 nick belum sesuai format: ${nick[0].full_name || nick[0].game_nick || 'pemain'}`
-          : `${nick.length} nick belum sesuai format inisial kontingen`,
+          : `${nick.length} nick belum sesuai format`,
     });
   }
 

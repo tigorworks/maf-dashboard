@@ -13,7 +13,9 @@
  */
 import { BaseElement, define } from '../core/element.js';
 import { css } from '../core/css.js';
-import { esc, formatDate, hueOf, initials, num, sisaWaktu, year } from '../core/format.js';
+import {
+  esc, formatDate, hueOf, initials, normalKontingen, num, sisaWaktu, year,
+} from '../core/format.js';
 import { GAME_META } from '../data/source.js';
 import {
   applyPlayerPatch, applyUpload, buangTim, caborTerkunci, gantiRoster, selectTeam, store,
@@ -21,9 +23,10 @@ import {
 import { ACCEPTED_TYPES, uploadTeamFile } from '../data/upload.js';
 import {
   adalahAdmin, adalahTim, ambilIdCard, ambilKodeTim, bolehLihatIdCard,
-  bolehHapusTim, bolehSuntingTim, bolehUnggahTim, buatKodeTim, hapusTim, JENIS_KODE,
-  namaJenis, normalKontingen, onAuth, sesiSekarang, simpanRoster,
+  ambilJejak, bolehHapusTim, bolehSuntingTim, bolehUnggahTim, buatKodeTim, hapusTim,
+  JENIS_KODE, namaJenis, onAuth, sesiSekarang, simpanRoster, UMUR_KODE,
 } from '../data/auth.js';
+import { jamJejak, jarakWaktu, jejakMembuang, perHari } from '../data/jejak.js';
 import { periksaTim } from '../data/rules.js';
 import { periksaNick } from '../data/nick.js';
 
@@ -1436,6 +1439,119 @@ const styles = css`
     gap: var(--sp-2);
   }
 
+  /* --- riwayat perubahan tim (admin) ---
+     Ditempatkan SETELAH roster, bukan di dekat kepala panel: ia menjawab
+     "kapan ini terakhir disentuh", pertanyaan yang muncul sesudah membaca
+     datanya — bukan sebelum. */
+  .riwayat {
+    padding: var(--sp-5) var(--tepi) 0;
+  }
+  .riwayat-kepala {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--sp-2) var(--sp-3);
+    padding-bottom: var(--sp-3);
+    border-bottom: 1px solid var(--border);
+  }
+  .riwayat-kepala h3 {
+    margin: 0;
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+  /* Jawaban ringkasnya berdiri di kepala, sebelum daftarnya dibuka: sering kali
+     "terakhir disentuh siapa, kapan" sudah cukup, dan rinciannya tidak perlu
+     dibaca sama sekali. */
+  .riwayat-nota {
+    flex: 1;
+    min-width: 0;
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
+  }
+  .riwayat-kepala button {
+    flex: none;
+    height: 32px;
+    padding: 0 var(--sp-3);
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    color: var(--accent);
+    background: none;
+    border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+    border-radius: var(--r-sm);
+  }
+  .riwayat-kepala button:disabled {
+    opacity: 0.55;
+    cursor: progress;
+  }
+  .riwayat-hari {
+    margin: var(--sp-4) 0 var(--sp-2);
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+  .riwayat-daftar {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .riwayat-daftar li {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-3);
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .riwayat-daftar li:last-child {
+    border-bottom: 0;
+  }
+  .rw-jam {
+    flex: none;
+    width: 46px;
+    font-size: var(--fs-xs);
+    font-variant-numeric: tabular-nums;
+    color: var(--text-faint);
+  }
+  .rw-isi {
+    flex: 1;
+    min-width: 0;
+    font-size: var(--fs-sm);
+    line-height: 1.5;
+    color: var(--text-muted);
+  }
+  .rw-isi b {
+    color: var(--text);
+  }
+  .rw-nilai {
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    color: var(--text);
+    word-break: break-word;
+  }
+  .rw-nilai.kosong {
+    color: var(--text-faint);
+    font-style: italic;
+  }
+  .rw-panah {
+    color: var(--text-faint);
+  }
+  .riwayat-daftar li.buang .rw-nilai,
+  .riwayat-daftar li.buang b {
+    color: var(--peringatan);
+  }
+  .riwayat-kosong {
+    margin: var(--sp-4) 0 0;
+    font-size: var(--fs-sm);
+    color: var(--text-faint);
+  }
+  .riwayat-kosong.galat {
+    color: var(--peringatan);
+  }
+
   /* --- zona bahaya: hapus tim (PIC) ---
      Ditaruh di DASAR halaman, terpisah dari segala yang lain. Aksinya tidak
      bisa dibatalkan dan tidak bisa diulang sendiri oleh PIC, jadi ia tidak
@@ -1726,6 +1842,20 @@ const styles = css`
       font-size: var(--fs-xs);
     }
 
+    /* Riwayat: jam turun ke atas isinya. Di 390 px, kolom jam 46 px memotong
+       nama pelaku dan nilainya jadi banyak baris pendek. */
+    .riwayat {
+      padding-left: var(--sp-3);
+      padding-right: var(--sp-3);
+    }
+    .riwayat-daftar li {
+      flex-direction: column;
+      gap: 0;
+    }
+    .rw-jam {
+      width: auto;
+    }
+
     /* Zona bahaya menumpuk: sebaris, tombolnya terjepit di sisa lebar setelah
        keterangan — dan tombol sempit adalah tombol yang tertekan setengah
        sengaja. Ditumpuk, ia selebar layar dan jelas apa yang ditekan. */
@@ -1896,6 +2026,10 @@ export class TeamDetail extends BaseElement {
     this._progres = null;
     // Konfirmasi hapus tim (PIC): { teamId, nama, sibuk, galat }.
     this._hapus = null;
+    // Riwayat perubahan tim ini: null = belum diminta. { memuat } | { daftar } |
+    // { galat }. Diminta atas permintaan, bukan saat panel dibuka — lihat
+    // _grupRiwayat().
+    this._riwayat = null;
   }
 
   render() {
@@ -2029,7 +2163,13 @@ export class TeamDetail extends BaseElement {
             </ol>
             ${bolehUbah && this._sunting ? `<input type="file" id="berkas" accept="${ACCEPTED_TYPES.join(',')}" hidden />` : ''}
             ${
-              bolehUbah && this._sunting
+              /* Menambah pemain HANYA untuk admin. PIC hanya membetulkan yang
+                 sudah ada: susunan peserta ditetapkan lewat pendaftaran resmi,
+                 dan nama serta status kepegawaian — dua hal yang menentukan
+                 keabsahan seorang pemain — justru field yang tidak boleh
+                 disunting PIC. Menyembunyikannya di sini, bukan mematikannya,
+                 supaya tidak ada tombol yang mengundang lalu menolak. */
+              bolehUbah && this._sunting && !this._suntingTerbatas()
                 ? `<button class="tambah-pemain" type="button" data-act="tambah-pemain"
                            ${this._roster.length >= this._maksPemain() ? 'disabled' : ''}>
                      + Tambah pemain
@@ -2068,6 +2208,7 @@ export class TeamDetail extends BaseElement {
                  </div>`
               : ''
           }
+          ${admin ? this._grupRiwayat(team) : ''}
           ${this._zonaBahaya(team)}`
           }
         </div>
@@ -2448,15 +2589,15 @@ export class TeamDetail extends BaseElement {
       // aman, alih-alih yang paling berkuasa.
       return `
         <button class="kode-buat" type="button" data-act="buat-kode-unggah"
-                title="Hanya mengunggah logo, ID card, dan foto. Berlaku 6 jam untuk SELURUH tim kontingen ini.">
+                title="Hanya mengunggah logo, ID card, dan foto. Berlaku ${UMUR_KODE} untuk SELURUH tim kontingen ini.">
           Unggah saja
         </button>
         <button class="kode-buat" type="button" data-act="buat-kode-penuh"
-                title="Membetulkan nick, ID game, server; menambah pemain; plus unggah berkas. TIDAK bisa menghapus tim. Berlaku 6 jam untuk SELURUH tim kontingen ini.">
+                title="Membetulkan nick, ID game, dan server pemain yang sudah terdaftar, plus unggah berkas. TIDAK bisa menambah, menghapus pemain, maupun menghapus tim. Berlaku ${UMUR_KODE} untuk SELURUH tim kontingen ini.">
           Ubah + unggah
         </button>
         <button class="kode-buat bahaya" type="button" data-act="buat-kode-hapus"
-                title="Semua di atas, DITAMBAH menghapus tim. Tim yang dihapus PIC tidak bisa didaftarkan ulang olehnya. Berlaku 6 jam untuk SELURUH tim kontingen ini.">
+                title="Semua di atas, DITAMBAH menghapus tim. Tim yang dihapus PIC tidak bisa didaftarkan ulang olehnya. Berlaku ${UMUR_KODE} untuk SELURUH tim kontingen ini.">
           Ubah + hapus
         </button>
         <button class="kode-mata" type="button" data-act="batal-pilih-kode"
@@ -2467,7 +2608,7 @@ export class TeamDetail extends BaseElement {
 
     return label
       ? `<button class="kode-buat" type="button" data-act="pilih-jenis-kode"
-                 title="Kode berlaku 6 jam sejak dibuat, untuk seluruh tim kontingen ini">${esc(label)}</button>`
+                 title="Kode berlaku ${UMUR_KODE} sejak dibuat, untuk seluruh tim kontingen ini">${esc(label)}</button>`
       : `<button class="kode-mata" type="button" data-act="pilih-jenis-kode"
                  aria-label="Buat ulang kode kontingen"
                  title="Buat ulang kode — membuat ulang membatalkan yang sekarang">
@@ -2601,6 +2742,97 @@ export class TeamDetail extends BaseElement {
   }
 
   /** Lapisan penuh di atas panel untuk memeriksa satu ID card. */
+  /**
+   * Riwayat perubahan TIM INI — siapa mengubah apa, kapan. Khusus admin.
+   *
+   * Dimuat atas permintaan, bukan saat panel dibuka. Setiap panggilan Apps
+   * Script memakan beberapa detik, dan membuka sebuah tim paling sering
+   * dikerjakan untuk memeriksa rosternya — bukan untuk membaca riwayatnya.
+   * Menariknya otomatis akan memperlambat pekerjaan yang paling sering
+   * dilakukan demi data yang jarang dilihat.
+   *
+   * Penyaringan per tim terjadi di GAS, bukan di sini: catatan satu tim bisa
+   * berselang jauh di antara catatan tim lain, jadi menyaring di browser akan
+   * menghasilkan kosong untuk tim yang sebenarnya punya riwayat.
+   */
+  _grupRiwayat(team) {
+    const r = this._riwayat;
+    const daftar = r?.daftar || [];
+
+    return `
+      <section class="riwayat">
+        <div class="riwayat-kepala">
+          <h3>Riwayat perubahan</h3>
+          ${
+            r?.daftar?.length
+              ? `<span class="riwayat-nota">
+                   Terakhir ${esc(jarakWaktu(daftar[0].waktu))} oleh ${esc(daftar[0].oleh || '—')}
+                 </span>`
+              : ''
+          }
+          <button type="button" data-act="muat-riwayat" ${r?.memuat ? 'disabled' : ''}>
+            ${r?.memuat ? 'Memuat…' : r ? 'Muat ulang' : 'Lihat riwayat'}
+          </button>
+        </div>
+        ${
+          r?.galat
+            ? `<p class="riwayat-kosong galat">${esc(r.galat)}</p>`
+            : !r || r.memuat
+              ? ''
+              : daftar.length
+                ? perHari(daftar)
+                    .map(
+                      (g) => `
+                      <h4 class="riwayat-hari">${esc(g.label)}</h4>
+                      <ol class="riwayat-daftar">
+                        ${g.item.map((b) => this._barisRiwayat(b)).join('')}
+                      </ol>`
+                    )
+                    .join('')
+                : '<p class="riwayat-kosong">Belum ada perubahan tercatat untuk tim ini.</p>'
+        }
+      </section>`;
+  }
+
+  /**
+   * Satu baris riwayat. Lebih rapat daripada di layar <jejak-list>: di sini
+   * nama tim sudah jelas dari panelnya sendiri, jadi yang tersisa hanya jam,
+   * pelaku, dan apa yang berubah.
+   */
+  _barisRiwayat(b) {
+    const nilai = (v) =>
+      v ? `<span class="rw-nilai">${esc(v)}</span>` : '<span class="rw-nilai kosong">kosong</span>';
+    return `
+      <li class="${jejakMembuang(b) ? 'buang' : ''}">
+        <span class="rw-jam">${esc(jamJejak(b.waktu))}</span>
+        <span class="rw-isi">
+          <b>${esc(b.oleh || '—')}</b>
+          <span class="rw-kolom">${esc(b.kolom || 'perubahan')}:</span>
+          ${nilai(b.sebelum)} <span class="rw-panah">→</span> ${nilai(b.sesudah)}
+        </span>
+      </li>`;
+  }
+
+  /** Ambil riwayat tim yang sedang dibuka. Dipanggil dari tombolnya. */
+  async _muatRiwayat() {
+    const team = this._team;
+    if (!team || this._riwayat?.memuat) return;
+    this._riwayat = { memuat: true };
+    this.render();
+    var hasil = null;
+    var galat = '';
+    try {
+      hasil = await ambilJejak({ teamId: team.team_id, batas: 40 });
+    } catch (error) {
+      galat = error.message || 'Gagal mengambil riwayat.';
+    }
+    // Tim bisa sudah berganti selagi permintaan berjalan; jawaban untuk tim lama
+    // tidak boleh menempel di panel tim yang sekarang.
+    if (this._team?.team_id !== team.team_id) return;
+    this._riwayat = galat ? { galat } : { daftar: hasil.jejak };
+    this.render();
+  }
+
   /**
    * Tombol hapus tim untuk PIC — di dasar layar, bukan di menu ⋮.
    *
@@ -3192,6 +3424,7 @@ export class TeamDetail extends BaseElement {
           // berganti berarti tombol "Ya, hapus" menghapus tim yang tidak lagi
           // terlihat di layar.
           this._hapus = null;
+          this._riwayat = null;
           this._lepasPilihan();
         }
         // Mode ditentukan menu baris: "Unggah berkas" -> layar unggah,
@@ -3237,6 +3470,11 @@ export class TeamDetail extends BaseElement {
           this._hapus = null;
           this.render();
         }
+        return;
+      }
+
+      if (event.target.closest('[data-act="muat-riwayat"]')) {
+        this._muatRiwayat();
         return;
       }
 
@@ -3330,6 +3568,10 @@ export class TeamDetail extends BaseElement {
       }
 
       if (event.target.closest('[data-act="tambah-pemain"]')) {
+        // Ditegakkan di penangan juga, bukan hanya dengan menyembunyikan
+        // tombolnya: penekanan lewat papan ketik dan tombol yang dimunculkan
+        // lewat DevTools melewati markup, tidak melewati sini.
+        if (this._suntingTerbatas()) return;
         this._tambahPemain();
         return;
       }
@@ -3550,7 +3792,10 @@ export class TeamDetail extends BaseElement {
 
   /**
    * Sedang menyunting dengan wewenang terbatas (PIC tim, bukan admin)?
-   * Menentukan field mana yang dikunci dan apakah tombol hapus muncul.
+   *
+   * Menentukan field mana yang dikunci, dan bahwa tombol tambah maupun hapus
+   * pemain tidak muncul: PIC membetulkan pemain yang sudah terdaftar, tidak
+   * menyusun ulang daftarnya.
    */
   _suntingTerbatas() {
     return !adalahAdmin() && adalahTim();

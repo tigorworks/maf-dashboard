@@ -111,7 +111,7 @@ export class FilterBar extends BaseElement {
   /** Isi property komponen anak (bukan atribut) + hitung facet count. */
   _sync() {
     const state = store.state;
-    const { filters, facets } = state;
+    const { filters } = state;
     const count = activeFilterCount(filters);
 
     const search = this.$('ui-search');
@@ -126,8 +126,31 @@ export class FilterBar extends BaseElement {
       return filterTeams(probe).length;
     };
 
+    // Pilihan kontingen diambil dari CABOR YANG SEDANG DIBUKA, bukan dari
+    // seluruh dataset.
+    //
+    // facets.kontingen adalah properti dataset — ia memuat kontingen kedua cabor
+    // sekaligus. Dipakai apa adanya di sini, kontingen yang hanya mengirim tim
+    // ke PUBG tetap tampil saat MLBB dibuka, dengan hitungan 0. Itu bukan
+    // sekadar berisik: satu kontingen yang penulisannya berbeda antar cabor
+    // (mis. "*REGION XII*" di PUBG dan "REGION XII" di MLBB) tampak seperti
+    // kontingen yang namanya gagal dibersihkan, padahal isinya memang ada di
+    // cabor sebelah.
+    //
+    // Pilihan bernilai 0 TIDAK dibuang begitu saja: nol yang muncul karena kotak
+    // cari sedang terisi harus tetap bisa dipilih, kalau tidak penyaringnya
+    // mengunci diri sendiri. Yang disaring di sini hanya cabornya.
     const kontingen = this.$('#kontingen');
-    kontingen.options = facets.kontingen.map((value) => ({
+    const daftarKontingen = [
+      ...new Set(
+        (state.teams || [])
+          .filter((t) => !filters.game || t.game === filters.game)
+          .map((t) => t.kontingen)
+          .filter(Boolean)
+      ),
+    ].sort((a, b) => a.localeCompare(b, 'id'));
+
+    kontingen.options = daftarKontingen.map((value) => ({
       value,
       label: value,
       count: countWithout('kontingen', value),
