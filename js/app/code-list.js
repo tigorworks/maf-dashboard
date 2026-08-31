@@ -189,7 +189,13 @@ const styles = css`
   .isi {
     padding: var(--sp-5) var(--tepi) var(--sp-7);
   }
+  /* table-layout: fixed — cacat yang sama dengan tabel daftar tim: dengan
+     layout otomatis, delapan kolom ber-nowrap membuat tabel melebar melewati
+     panel, dan overflow hidden di bawah memotongnya TANPA cara melihat
+     sisanya. Dengan fixed, lebar diambil dari header dan kelebihan isi berakhir
+     sebagai elipsis yang terlihat. */
   table {
+    table-layout: fixed;
     width: 100%;
     border-collapse: separate;
     border-spacing: 0;
@@ -204,6 +210,10 @@ const styles = css`
     padding: var(--sp-3);
     text-align: left;
     vertical-align: middle;
+    /* Sel memotong isinya sendiri; tanpa ini satu nama kontingen panjang cukup
+       untuk mengembalikan pemotongan yang baru diperbaiki. */
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   thead th {
     font-size: var(--fs-xs);
@@ -329,7 +339,10 @@ const styles = css`
     border-radius: var(--r-md);
   }
 
-  @media (max-width: 900px) {
+  /* Ambang kartu disamakan dengan tabel daftar tim (1100 px): delapan kolom
+     baru terbaca nyaman di atas itu, dan rentang ±1000-1050 px — tablet dengan
+     bilah sisi peramban terbuka — justru yang paling bermasalah. */
+  @media (max-width: 1100px) {
     header {
       flex-wrap: wrap;
       padding: var(--sp-2) var(--sp-3);
@@ -669,16 +682,23 @@ export class CodeList extends BaseElement {
 
     return `
       <table>
+        ${
+          /* Lebar kolom ditulis di sini, dan itu WAJIB bersama table-layout:
+             fixed di bawah — tanpa lebar, kolom dibagi rata dan kolom "#"
+             mendapat porsi yang sama dengan Kontingen. Persennya berjumlah 80%;
+             sisanya diambil tiga kolom px (46 + 132 + 44 = 222px), yang pada
+             lebar tabel tersempit (1101px) setara ±20%. */ ''
+        }
         <thead>
           <tr>
-            <th class="idx">#</th>
-            <th>Kontingen</th>
-            <th>PIC</th>
-            <th>No HP</th>
-            <th>Cakupan</th>
-            <th>Kode</th>
-            <th>Berlaku</th>
-            <th><span class="sr-only">Salin</span></th>
+            <th class="idx" style="width:46px">#</th>
+            <th style="width:22%">Kontingen</th>
+            <th style="width:17%">PIC</th>
+            <th style="width:132px">No HP</th>
+            <th style="width:16%">Cakupan</th>
+            <th style="width:14%">Kode</th>
+            <th style="width:11%">Berlaku</th>
+            <th style="width:44px"><span class="sr-only">Salin</span></th>
           </tr>
         </thead>
         <tbody>

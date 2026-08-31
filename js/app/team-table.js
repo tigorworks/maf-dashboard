@@ -10,7 +10,9 @@ import { css } from '../core/css.js';
 import {
   esc, formatDate, highlight, hueOf, initials, jamMenit, normalKontingen, num, sisaWaktu,
 } from '../core/format.js';
-import { buangTim, COLUMNS, matchedMembers, selectTeam, setSort, store } from '../data/app-state.js';
+import {
+  buangTim, COLUMNS, LEBAR_AKSI, matchedMembers, selectTeam, setSort, store,
+} from '../data/app-state.js';
 import {
   adalahAdmin, bolehUnggahTim, buatKodeTim, hapusTim, JENIS_KODE, namaJenis, UMUR_KODE,
 } from '../data/auth.js';
@@ -65,7 +67,18 @@ const styles = css`
   .scroll {
     overflow: visible;
   }
+  /* table-layout: fixed — inilah yang membuat tabel tidak bisa terpotong.
+     Dengan layout otomatis, lebar tabel ditentukan isi selnya; white-space
+     nowrap di tiap sel membuatnya melebar sampai melewati panel, dan karena
+     panelnya memotong (overflow: clip) sementara tidak ada area gulir mendatar,
+     kolom terakhir hilang begitu saja di layar ~1000-1100 px — tablet dengan
+     bilah sisi terbuka. Terpotong TANPA cara melihatnya adalah kegagalan yang
+     paling buruk bentuknya: tidak ada isyarat apa pun bahwa masih ada kolom.
+     Dengan fixed, lebar kolom diambil dari header (lihat COLUMNS, jumlahnya
+     100%), tabel selalu selebar panel, dan kelebihan isi berakhir sebagai
+     elipsis yang terlihat. */
   table {
+    table-layout: fixed;
     width: 100%;
     border-collapse: separate;
     border-spacing: 0;
@@ -76,6 +89,11 @@ const styles = css`
     padding: var(--sp-3);
     text-align: left;
     white-space: nowrap;
+    /* Sel tidak boleh mendorong kolomnya melebar. Tanpa ini, satu nama panjang
+       tanpa spasi cukup untuk mengembalikan pemotongan yang baru saja
+       diperbaiki. */
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   /* Kepala tabel tetap menempel — tapi kini ke VIEWPORT, bukan ke kotak gulir
      yang sudah tidak ada. Offsetnya setinggi header aplikasi yang juga sticky;
@@ -146,11 +164,14 @@ const styles = css`
     color: var(--text-faint);
   }
 
+  /* Lebar isi sel mengikuti KOLOMNYA, bukan angka tetap. max-width dalam px
+     membuat sel menolak menyusut di layar sempit — dan itulah yang dulu memaksa
+     tabel melebar melewati panel. */
   .team {
     display: flex;
     align-items: center;
     gap: var(--sp-3);
-    max-width: 300px;
+    max-width: 100%;
   }
   .crest {
     position: relative;
@@ -249,7 +270,7 @@ const styles = css`
   }
   .truncate {
     display: block;
-    max-width: 240px;
+    max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
   }
@@ -259,7 +280,7 @@ const styles = css`
      sudah jadi warna aksi (sort, tautan, highlight). */
   .chip {
     display: inline-block;
-    max-width: 250px;
+    max-width: 100%;
     padding: 3px 11px;
     font-size: var(--fs-xs);
     font-weight: 700;
@@ -277,7 +298,11 @@ const styles = css`
     display: flex;
     flex-direction: column;
     gap: 1px;
-    max-width: 220px;
+    max-width: 100%;
+  }
+  .pic > * {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .pic .nip {
     font-family: var(--font-mono);
@@ -576,7 +601,14 @@ const styles = css`
      bawaan sudah memadai dan pengurutan tetap utuh di layar lebar. */
 
   /* --- Mode kartu untuk layar sempit --- */
-  @media (max-width: 900px) {
+  /* Ambang kartu 1100 px, bukan 900.
+     Tujuh kolom baru terbaca nyaman di atas ~1100 px; di bawah itu semuanya
+     menyusut sampai hampir seluruh kolom berakhir dengan elipsis, dan tabel
+     yang setiap selnya terpotong lebih buruk daripada kartu. 1100 px juga
+     menutup rentang yang justru bermasalah — tablet dengan bilah sisi peramban
+     terbuka (±1000-1050 px) — dan di layar sentuh kartu memang lebih mudah
+     ditekan daripada baris setinggi 44 px. */
+  @media (max-width: 1100px) {
     thead {
       display: none;
     }
@@ -734,7 +766,7 @@ export class TeamTable extends BaseElement {
                 }</span>
                 </th>`;
               }).join('')}
-              <th scope="col" style="width:56px"><span class="sr-only">Aksi</span></th>
+              <th scope="col" style="width:${LEBAR_AKSI}"><span class="sr-only">Aksi</span></th>
             </tr>
           </thead>
           <tbody>
