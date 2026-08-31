@@ -155,8 +155,8 @@ export class LoginDialog extends BaseElement {
         </form>
 
         <p class="catatan">
-          PIC tim memakai <b>Kode Tim</b> dari panitia: masuk dengan kode itu membuka
-          pengubahan terbatas dan unggahan berkas untuk timnya sendiri.
+          PIC memakai <b>Kode Tim</b> dari panitia: masuk dengan kode itu membuka
+          pengubahan terbatas dan unggahan berkas untuk seluruh tim kontingennya.
           Sesi berakhir sendiri setelah 3 jam tidak digunakan. Kunci dibagikan
           panitia dan berlaku untuk satu orang — jangan diteruskan.
         </p>

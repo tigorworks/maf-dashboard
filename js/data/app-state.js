@@ -43,8 +43,9 @@ export const store = createStore({
   pageSize: PAGE_SIZE,
   selectedTeamId: null,
   selectedFocus: null, // null | 'berkas' | 'foto' — layar yang dituju saat tim dibuka
-  // Halaman khusus admin: daftar seluruh Kode Tim pada cabor terpilih.
+  // Halaman khusus admin: daftar kode aktif, satu baris per kontingen.
   showCodes: false,
+  showAudit: false,
   // Cerminan sesi dari data/auth.js, supaya komponen cukup berlangganan store.
   // Ini hanya untuk TAMPILAN — wewenang sesungguhnya ditegakkan GAS.
   auth: null, // null | { nama, peran }
@@ -85,7 +86,7 @@ export function resetFilters() {
 export function clearGame() {
   store.set({
     filters: { ...DEFAULT_FILTERS }, page: 1,
-    selectedTeamId: null, selectedFocus: null, showCodes: false,
+    selectedTeamId: null, selectedFocus: null, showCodes: false, showAudit: false,
   });
 }
 
@@ -131,12 +132,23 @@ export function setTerkunci(terkunci) {
   store.set((state) => ({ meta: { ...state.meta, terkunci: terkunci || {} } }));
 }
 
+/**
+ * Kembali ke daftar tim: tutup halaman tim, Kode Tim, dan notifikasi sekaligus.
+ *
+ * Cabor yang sedang dibuka TIDAK ikut dibersihkan — itu konteks, bukan halaman,
+ * dan melemparkan orang kembali ke layar pilihan cabor adalah satu langkah
+ * mundur lebih jauh daripada yang dimintanya.
+ */
+export function kembaliKeDaftar() {
+  store.set({ selectedTeamId: null, selectedFocus: null, showCodes: false, showAudit: false });
+}
+
 export function setAuth(sesi) {
-  // teamId ikut disimpan supaya komponen yang membaca store (bukan modul auth)
-  // tahu tim mana yang boleh disunting oleh sesi peran 'tim'.
+  // kontingen ikut disimpan supaya komponen yang membaca store (bukan modul
+  // auth) tahu tim mana yang boleh disunting oleh sesi peran 'tim'.
   store.set({
     auth: sesi
-      ? { nama: sesi.nama, peran: sesi.peran, teamId: sesi.teamId || '', jenis: sesi.jenis || '' }
+      ? { nama: sesi.nama, peran: sesi.peran, kontingen: sesi.kontingen || '', jenis: sesi.jenis || '' }
       : null,
   });
 }
@@ -212,12 +224,31 @@ export function gantiRoster(teamId, members) {
  * baris supaya tiap pilihan mendarat tepat di tempatnya.
  */
 export function selectTeam(teamId, focus = null) {
-  store.set({ selectedTeamId: teamId, selectedFocus: teamId ? focus : null, showCodes: false });
+  store.set({
+    selectedTeamId: teamId,
+    selectedFocus: teamId ? focus : null,
+    showCodes: false,
+    showAudit: false,
+  });
 }
 
-/** Buka/tutup halaman daftar kode tim. Saling meniadakan dengan halaman tim. */
+/** Buka/tutup halaman daftar kode. Saling meniadakan dengan halaman tim. */
+export function setShowAudit(tampil) {
+  store.set({
+    showAudit: Boolean(tampil),
+    showCodes: false,
+    selectedTeamId: null,
+    selectedFocus: null,
+  });
+}
+
 export function setShowCodes(tampil) {
-  store.set({ showCodes: Boolean(tampil), selectedTeamId: null, selectedFocus: null });
+  store.set({
+    showCodes: Boolean(tampil),
+    showAudit: false,
+    selectedTeamId: null,
+    selectedFocus: null,
+  });
 }
 
 export function activeFilterCount(filters = store.state.filters) {

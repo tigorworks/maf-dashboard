@@ -6,12 +6,15 @@ import { BaseElement, define } from '../core/element.js';
 import { css } from '../core/css.js';
 import { esc } from '../core/format.js';
 import { loadDataset } from '../data/source.js';
-import { derive, setAuth, setDataset, setError, setPage, store } from '../data/app-state.js';
+import {
+  derive, kembaliKeDaftar, setAuth, setDataset, setError, setPage, store,
+} from '../data/app-state.js';
 import { initGameRouting } from '../data/router.js';
 import { adalahAdmin, onAuth, pulihkanSesi } from '../data/auth.js';
 import './app-header.js';
 import './login-dialog.js';
 import './code-list.js';
+import './audit-list.js';
 import './sport-gate.js';
 import './stat-grid.js';
 import './filter-bar.js';
@@ -43,7 +46,8 @@ const styles = css`
   /* Halaman tim mengatur paddingnya sendiri supaya pita judulnya bisa
      membentang penuh selebar halaman. */
   main:has(team-detail),
-  main:has(code-list) {
+  main:has(code-list),
+  main:has(audit-list) {
     padding: 0;
     gap: 0;
   }
@@ -255,6 +259,11 @@ export class AppShell extends BaseElement {
     }
 
     // Halaman kode tim (khusus admin) juga halaman penuh.
+    if (state.showAudit) {
+      if (!main.querySelector('audit-list')) main.innerHTML = '<audit-list></audit-list>';
+      return;
+    }
+
     if (state.showCodes) {
       if (!main.querySelector('code-list')) main.innerHTML = '<code-list></code-list>';
       return;
@@ -359,7 +368,31 @@ export class AppShell extends BaseElement {
     this.listen(this.shadowRoot, 'page', (e) => setPage(e.detail.page));
 
     // Sesi dicerminkan ke store supaya komponen cukup berlangganan satu sumber.
-    this.track(onAuth((sesi) => setAuth(sesi)));
+    //
+    // Sekaligus: begitu sesi BERAKHIR, layar kembali ke daftar tim. Halaman Kode
+    // Tim dan notifikasi hanya berisi data ber-token; ditinggalkan terbuka,
+    // keduanya berubah jadi layar galat "Sesi berakhir" yang tidak bisa
+    // diapa-apakan. Halaman detail tim memang masih bisa dibaca tanpa sesi,
+    // tetapi separuh isinya baru saja lenyap — kembali ke daftar lebih jujur
+    // daripada halaman yang diam-diam menyusut.
+    //
+    // Dipasang di SINI, bukan di penangan tombol Keluar, karena sesi bisa
+    // berakhir dengan tiga cara: ditekan keluar, habis 3 jam menganggur, atau
+    // GAS menjawab "sesi berakhir" di tengah permintaan. Ketiganya berujung ke
+    // umumkan() yang sama, jadi satu aturan di satu tempat mengurus semuanya.
+    //
+    // Perpindahannya yang diperhatikan, bukan keadaannya: onAuth memanggil
+    // pendengarnya sekali saat dipasang — dan saat itu sesinya memang belum ada.
+    // Tanpa penjaga ini, panggilan pembuka itu akan menutup halaman yang justru
+    // sedang dituju oleh alamat yang baru saja dibuka.
+    let adaSesi = false;
+    this.track(
+      onAuth((sesi) => {
+        setAuth(sesi);
+        if (adaSesi && !sesi) kembaliKeDaftar();
+        adaSesi = Boolean(sesi);
+      })
+    );
     this.listen(this.shadowRoot, 'minta-masuk', () => this.$('login-dialog')?.buka());
 
     // Pulihkan sesi dari cookie tanpa menahan pemuatan data: token diverifikasi

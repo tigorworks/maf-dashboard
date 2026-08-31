@@ -1,9 +1,12 @@
 /**
- * <code-list> — daftar Kode Tim seluruh tim pada cabor yang sedang dibuka.
- * Khusus admin.
+ * <code-list> — daftar kode yang sedang aktif. Khusus admin.
  *
- * Datanya TIDAK berasal dari store: Kode Tim dan No HP sengaja tidak pernah
- * ikut payload publik (lihat KOLOM_RAHASIA di Code.gs). Halaman ini mengambilnya
+ * Satu baris = satu KONTINGEN, bukan satu tim. Kode berlaku untuk seluruh tim
+ * satu kontingen di semua cabor, jadi daftar ini pun tidak disaring per cabor:
+ * menyaringnya akan menyembunyikan separuh akibat dari kode yang sama.
+ *
+ * Datanya TIDAK berasal dari store: kode dan No HP sengaja tidak pernah ikut
+ * payload publik (lihat KOLOM_RAHASIA di Code.gs). Halaman ini mengambilnya
  * lewat permintaan ber-token tersendiri, dan GAS menolak siapa pun selain admin.
  *
  * Yang ditampilkan adalah kontak untuk MENGHUBUNGI, jadi tiap baris menyediakan
@@ -13,7 +16,10 @@ import { BaseElement, define } from '../core/element.js';
 import { css } from '../core/css.js';
 import { esc, jamMenit, normalize, num, sisaWaktu } from '../core/format.js';
 import { caborTerkunci, setShowCodes, setTerkunci, store } from '../data/app-state.js';
-import { ambilKodeTim, aturKunciRoster, resetKodeTim } from '../data/auth.js';
+import {
+  ambilKodeTim, aturKunciRoster, buatKodeSemua, JENIS_KODE, namaJenis, normalKontingen,
+  resetKodeTim,
+} from '../data/auth.js';
 import { GAME_META } from '../data/source.js';
 
 const styles = css`
@@ -108,6 +114,14 @@ const styles = css`
   }
   .nota b {
     color: var(--text);
+  }
+  /* Kabar berhasil memakai kerangka yang sama dengan peringatan supaya
+     keduanya menempati tempat yang sama persis — hanya warnanya yang berbeda,
+     sehingga daftar di bawahnya tidak bergeser saat kabar itu muncul. */
+  .nota.sukses {
+    color: #45c47a;
+    background: color-mix(in srgb, #45c47a 10%, transparent);
+    border-bottom-color: color-mix(in srgb, #45c47a 26%, transparent);
   }
 
   /* --- kendali kunci roster --- */
@@ -259,6 +273,15 @@ const styles = css`
     font-size: var(--fs-xs);
     color: var(--text-faint);
   }
+  /* Kode berwewenang hapus ditandai: dalam satu tabel berisi puluhan baris,
+     inilah satu-satunya yang akibatnya tidak bisa ditarik kembali.
+
+     Selektornya menyebut .pic small juga, bukan .jenis-bahaya sendirian:
+     aturan .pic small di atas lebih spesifik, dan akan memenangkan warnanya. */
+  .pic small.jenis-bahaya {
+    color: var(--peringatan);
+    font-weight: 700;
+  }
   .kode {
     font-family: var(--font-mono);
     font-size: var(--fs-md);
@@ -403,6 +426,9 @@ export class CodeList extends BaseElement {
     this._galat = '';
     this._cari = '';
     this._tersalin = '';
+    this._konfirmasiSemua = false;
+    this._pitaSibukSemua = false;
+    this._pesanAksi = '';
   }
 
   render() {
@@ -416,18 +442,22 @@ export class CodeList extends BaseElement {
           <button class="kembali" type="button" data-act="kembali" aria-label="Kembali ke daftar tim">
             ${IKON_KEMBALI}<span>Kembali</span>
           </button>
-          <h2>Kode Tim ${esc(meta.label)}${
-      this._data ? `<small>${num(baris.length)} dari ${num(this._data.length)} tim</small>` : ''
+          <h2>Kode kontingen${
+      this._data
+        ? `<small>${num(baris.length)} dari ${num(this._data.length)} kontingen</small>`
+        : ''
     }</h2>
-          <input class="cari" type="search" placeholder="Cari kontingen, tim, PIC…"
+          <input class="cari" type="search" placeholder="Cari kontingen, PIC, kode…"
                  value="${esc(this._cari)}" aria-label="Cari" />
         </header>
 
         ${this._pitaKunci(meta)}
 
+        ${this._pesanAksi ? `<p class="nota sukses">${esc(this._pesanAksi)}</p>` : ''}
+
         <p class="nota">
-          Kode ini memberi hak <b>mengunggah berkas</b> tim. Kirimkan hanya ke PIC
-          tim yang bersangkutan.
+          Satu kode berlaku untuk <b>seluruh tim satu kontingen</b>, lintas cabor.
+          Kirimkan hanya ke PIC kontingen yang bersangkutan.
         </p>
 
         <div class="isi">
@@ -443,6 +473,7 @@ export class CodeList extends BaseElement {
    */
   _pitaKunci(meta) {
     if (this._konfirmasiReset) return this._pitaReset();
+    if (this._konfirmasiSemua) return this._pitaSemua();
 
     const game = store.state.filters.game;
     const info = store.state.meta?.terkunci?.[game];
@@ -458,7 +489,7 @@ export class CodeList extends BaseElement {
             ${
               terkunci
                 ? 'PIC bisa kembali mengunggah berkas dengan Kode Tim.'
-                : `Seluruh ${num(this._data?.length || 0)} Kode Tim berhenti berlaku. Admin tetap bisa mengunggah.`
+                : `Seluruh ${num(this._data?.length || 0)} kode berhenti berlaku. Admin tetap bisa mengunggah.`
             }
           </span>
           <button type="button" data-act="batal-kunci">Batal</button>
@@ -481,6 +512,17 @@ export class CodeList extends BaseElement {
         </span>
         <button type="button" data-act="minta-kunci">${terkunci ? 'Buka kunci' : 'Kunci roster'}</button>
         ${
+          /* Membuat sekaligus berdiri di sini, bukan di dalam tabel: yang
+             dilakukannya adalah menerbitkan satu gelombang kode untuk SELURUH
+             kontingen, dan tabel di bawahnya justru hasilnya. Tombolnya tetap
+             ada saat daftar kosong — di situlah ia paling dibutuhkan. */
+          this._pitaSibukSemua
+            ? '<button type="button" disabled>Membuat…</button>'
+            : `<button type="button" data-act="minta-semua">
+                 Buat kode semua kontingen
+               </button>`
+        }
+        ${
           /* Reset berdiri di samping kunci karena keduanya menutup akses
              peserta — bedanya, mengunci menghentikan SEMENTARA seluruh cabor
              ini, sedangkan reset membatalkan kode yang sudah terlanjur
@@ -494,13 +536,96 @@ export class CodeList extends BaseElement {
       </div>`;
   }
 
-  /** Konfirmasi reset seluruh Kode Tim aktif. */
+  /**
+   * Berapa kontingen yang ada di data peserta — termasuk yang belum punya kode.
+   *
+   * Dihitung dari store, bukan dari daftar kode: daftar kode hanya memuat yang
+   * SUDAH punya, sedangkan yang perlu diketahui sebelum menekan "buat semua"
+   * justru berapa banyak yang akan menerima. Dibakukan lebih dulu supaya beda
+   * penulisan antarbaris tidak menggelembungkan angkanya.
+   */
+  _jumlahKontingen() {
+    const set = new Set();
+    (store.state.teams || []).forEach((t) => {
+      const k = normalKontingen(t.kontingen);
+      if (k) set.add(k);
+    });
+    return set.size;
+  }
+
+  /**
+   * Konfirmasi pembuatan kode untuk seluruh kontingen — sekaligus tempat
+   * memilih wewenangnya.
+   *
+   * Dua keputusan digabung dalam satu pita karena keduanya satu tarikan napas:
+   * memisahkannya jadi "yakin?" lalu "jenis apa?" menambah satu layar tanpa
+   * menambah satu pun informasi baru. Yang perlu ditegaskan hanyalah bahwa kode
+   * lama ikut tergantikan.
+   */
+  _pitaSemua() {
+    const jumlah = this._jumlahKontingen();
+    const adaLama = this._data?.length || 0;
+    return `
+      <div class="pita-kunci konfirmasi">
+        <span class="pita-teks">
+          <b>Buat kode baru untuk ${num(jumlah)} kontingen?</b>
+          ${
+            adaLama
+              ? `${num(adaLama)} kode yang sekarang beredar ikut diganti dan langsung berhenti berlaku. `
+              : ''
+          }Semuanya berlaku 6 jam sejak dibuat. Wewenang <b>hapus tim</b> tidak
+          dibagikan massal — buatkan per kontingen dari detail tim bila ada yang
+          membatalkan tim. Pilih wewenangnya:
+        </span>
+        <button type="button" data-act="batal-semua">Batal</button>
+        <button type="button" data-act="semua-unggah" ${this._sibuk ? 'disabled' : ''}>
+          Unggah saja
+        </button>
+        <button type="button" class="utama" data-act="semua-penuh" ${this._sibuk ? 'disabled' : ''}>
+          Ubah + unggah
+        </button>
+        ${
+          /* "Ubah + hapus" TIDAK ditawarkan untuk pembuatan massal.
+             Wewenang menghapus diberikan kepada kontingen yang memang sedang
+             membatalkan tim — satu dua, bukan semuanya. Menyediakannya di sini
+             berarti satu tekan tombol memasangkan tombol hapus yang tak bisa
+             ditarik di dasar halaman setiap tim di seluruh turnamen. Yang
+             membutuhkannya dibuatkan satu per satu dari detail tim atau menu ⋮. */
+          ''
+        }
+      </div>`;
+  }
+
+  /** Terbitkan satu gelombang kode untuk seluruh kontingen. */
+  async _buatSemua(jenis) {
+    if (this._sibuk) return;
+    this._sibuk = true;
+    this._pitaSibukSemua = true;
+    this._konfirmasiSemua = false;
+    this._pesanAksi = '';
+    this.render();
+    try {
+      const hasil = await buatKodeSemua(jenis);
+      this._galat = '';
+      // Daftarnya dibaca ulang, bukan dirakit dari jawaban: hanya daftarKode
+      // yang tahu cakupan tiap kontingen (berapa tim, cabor apa) dan kontaknya.
+      await this._muat();
+      this._pesanAksi = `${hasil.dibuat} kode dibuat untuk seluruh kontingen, berlaku 6 jam.`;
+    } catch (error) {
+      this._galat = error.message || 'Gagal membuat kode.';
+    }
+    this._sibuk = false;
+    this._pitaSibukSemua = false;
+    this.render();
+  }
+
+  /** Konfirmasi reset seluruh kode aktif. */
   _pitaReset() {
     const jumlah = this._data?.length || 0;
     return `
       <div class="pita-kunci konfirmasi">
         <span class="pita-teks">
-          <b>Batalkan ${num(jumlah)} Kode Tim yang aktif?</b>
+          <b>Batalkan ${num(jumlah)} kode kontingen yang aktif?</b>
           Berlaku untuk SELURUH cabor, bukan hanya yang sedang dibuka. PIC yang
           sedang memakainya langsung terputus, dan kode baru harus dibagikan ulang.
         </span>
@@ -519,7 +644,8 @@ export class CodeList extends BaseElement {
       this._galat = '';
       // Daftarnya memang jadi kosong — itu seluruh isi halaman ini.
       this._data = [];
-      this._pesanReset = `${dihapus} Kode Tim dibatalkan.`;
+      this._pesanAksi = '';
+      this._pesanReset = `${dihapus} kode dibatalkan.`;
     } catch (error) {
       this._galat = error.message || 'Gagal mereset Kode Tim.';
     }
@@ -533,12 +659,13 @@ export class CodeList extends BaseElement {
     if (!this._data) return '<div class="status">Mengambil kode tim…</div>';
     if (!this._data.length) {
       return `<div class="status">
-                ${this._pesanReset ? `${esc(this._pesanReset)} ` : ''}Belum ada Kode Tim yang aktif.
-                Kode dibuat dari halaman detail tim atau menu ⋮ di daftar tim, dan berlaku 6 jam.
+                ${this._pesanReset ? `${esc(this._pesanReset)} ` : ''}Belum ada kode yang aktif.
+                Kode dibuat dari halaman detail tim, menu ⋮ di daftar tim, atau tombol
+                “Buat kode semua kontingen” di atas — dan berlaku 6 jam.
               </div>`;
     }
     if (!baris.length) {
-      return `<div class="status">Tidak ada tim yang cocok dengan “${esc(this._cari)}”.</div>`;
+      return `<div class="status">Tidak ada kontingen yang cocok dengan “${esc(this._cari)}”.</div>`;
     }
 
     return `
@@ -549,8 +676,8 @@ export class CodeList extends BaseElement {
             <th>Kontingen</th>
             <th>PIC</th>
             <th>No HP</th>
-            <th>Tim</th>
-            <th>Kode Tim</th>
+            <th>Cakupan</th>
+            <th>Kode</th>
             <th>Berlaku</th>
             <th><span class="sr-only">Salin</span></th>
           </tr>
@@ -564,11 +691,21 @@ export class CodeList extends BaseElement {
               <td data-label="Kontingen"><span class="kontingen">${esc(b.kontingen || '—')}</span></td>
               <td data-label="PIC" class="pic">
                 ${esc(b.pic || '—')}
-                <small>${esc(b.sumberKontak === 'Tim' ? 'PIC tim' : 'PIC kontingen')}</small>
+                <small>PIC kontingen</small>
               </td>
               <td data-label="No HP"><span class="hp">${esc(b.hp || '—')}</span></td>
-              <td data-label="Tim"><span class="tim">${esc(b.teamName || '—')}</span></td>
-              <td data-label="Kode"><span class="kode">${esc(b.kode || '—')}</span></td>
+              <td data-label="Cakupan" class="pic">
+                ${/* Berapa tim yang ikut terbuka oleh kode ini — angka inilah yang
+                     membedakan kode yang ringan akibatnya dari yang berat. */ ''}
+                <span class="tim">${num(b.tim || 0)} tim</span>
+                <small>${esc((b.cabor || []).join(' · ') || '—')}</small>
+              </td>
+              <td data-label="Kode" class="pic">
+                <span class="kode">${esc(b.kode || '—')}</span>
+                <small class="${b.jenis === JENIS_KODE.HAPUS ? 'jenis-bahaya' : ''}">
+                  ${esc(namaJenis(b.jenis))}
+                </small>
+              </td>
               <td data-label="Berlaku">
                 ${
                   /* Sisa waktu dulu, jam berakhirnya kemudian: yang menentukan
@@ -585,11 +722,11 @@ export class CodeList extends BaseElement {
                 }
               </td>
               <td class="aksi">
-                <button class="salin ${this._tersalin === b.teamId ? 'selesai' : ''}" type="button"
-                        data-salin="${esc(b.kode || '')}" data-team="${esc(b.teamId)}"
-                        title="Salin kode ${esc(b.teamName || '')}"
-                        aria-label="Salin kode tim ${esc(b.teamName || '')}">
-                  ${this._tersalin === b.teamId ? IKON_CEKLIS : IKON_SALIN}
+                <button class="salin ${this._tersalin === b.kontingen ? 'selesai' : ''}" type="button"
+                        data-salin="${esc(b.kode || '')}" data-kontingen="${esc(b.kontingen || '')}"
+                        title="Salin kode ${esc(b.kontingen || '')}"
+                        aria-label="Salin kode kontingen ${esc(b.kontingen || '')}">
+                  ${this._tersalin === b.kontingen ? IKON_CEKLIS : IKON_SALIN}
                 </button>
               </td>
             </tr>`
@@ -604,7 +741,7 @@ export class CodeList extends BaseElement {
     const q = normalize(this._cari.trim());
     if (!q) return this._data;
     return this._data.filter((b) =>
-      normalize([b.kontingen, b.teamName, b.pic, b.kode, b.hp].join(' ')).includes(q)
+      normalize([b.kontingen, b.pic, b.kode, b.hp, (b.cabor || []).join(' ')].join(' ')).includes(q)
     );
   }
 
@@ -631,6 +768,25 @@ export class CodeList extends BaseElement {
         return;
       }
 
+      if (event.target.closest('[data-act="minta-semua"]')) {
+        this._konfirmasiSemua = true;
+        this.render();
+        return;
+      }
+      if (event.target.closest('[data-act="batal-semua"]')) {
+        this._konfirmasiSemua = false;
+        this.render();
+        return;
+      }
+      if (event.target.closest('[data-act="semua-penuh"]')) {
+        this._buatSemua(JENIS_KODE.PENUH);
+        return;
+      }
+      if (event.target.closest('[data-act="semua-unggah"]')) {
+        this._buatSemua(JENIS_KODE.UNGGAH);
+        return;
+      }
+
       if (event.target.closest('[data-act="minta-kunci"]')) {
         this._konfirmasi = true;
         this.render();
@@ -647,7 +803,7 @@ export class CodeList extends BaseElement {
       }
 
       const salin = event.target.closest('[data-salin]');
-      if (salin) this._salin(salin.dataset.salin, salin.dataset.team);
+      if (salin) this._salin(salin.dataset.salin, salin.dataset.kontingen);
     });
 
     this.listen(this.shadowRoot, 'input', (event) => {
@@ -667,7 +823,7 @@ export class CodeList extends BaseElement {
 
   async _muat() {
     try {
-      this._data = await ambilKodeTim({ game: store.state.filters.game });
+      this._data = await ambilKodeTim();
       this._galat = '';
     } catch (error) {
       this._galat = error.message || 'Gagal mengambil kode tim.';
@@ -691,11 +847,11 @@ export class CodeList extends BaseElement {
     this.render();
   }
 
-  async _salin(kode, teamId) {
+  async _salin(kode, kontingen) {
     if (!kode) return;
     try {
       await navigator.clipboard.writeText(kode);
-      this._tersalin = teamId;
+      this._tersalin = kontingen;
       this.render();
       clearTimeout(this._timerSalin);
       this._timerSalin = setTimeout(() => {
