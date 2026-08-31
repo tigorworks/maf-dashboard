@@ -7,15 +7,40 @@ import { createStore } from '../core/store.js';
 import { compare, normalize } from '../core/format.js';
 import { summarize } from './source.js';
 
+/*
+ * Kolom tabel tim. `width` ditulis sebagai NILAI CSS YANG SAH untuk properti
+ * `width` — dulu isinya `minmax(220px, 1.3fr)`, yang hanya berlaku di grid dan
+ * DIABAIKAN peramban saat dipasang lewat style="width:...". Akibatnya lebar
+ * kolom sepenuhnya ditentukan isi sel; dengan `white-space: nowrap` di tiap sel,
+ * tabelnya melebar melewati panel dan terpotong tanpa jalan untuk melihatnya.
+ *
+ * Sekarang persen, dipasangkan dengan `table-layout: fixed` di team-table.js —
+ * itulah yang membuat tabel MUSTAHIL melebihi lebar panelnya: kolom menyusut dan
+ * teksnya berakhir dengan elipsis, bukan hilang di balik tepi layar.
+ *
+ * Kolom sempit (#, Pemain, aksi) tetap px karena isinya berlebar tetap; persen
+ * hanya membuatnya melebar tanpa guna di layar besar.
+ *
+ * Persennya berjumlah 85%, BUKAN 100%, dan itu perhitungan bukan kelalaian:
+ * ketiga kolom px berjumlah 162px, yang pada lebar tabel tersempit yang mungkin
+ * (1101px — di bawah itu tampilannya jadi kartu) adalah ±15%. Jadi 85% + 15%
+ * genap. Kalau persennya ditulis 100%, jumlah seluruh kolom melebihi lebar
+ * tabel dan peramban menyusutkan semuanya secara proporsional — hasilnya tetap
+ * tidak terpotong, tapi angka di sini berhenti berarti apa pun. Di layar yang
+ * lebih lebar, porsi px mengecil dan sisanya dibagikan ke kolom persen.
+ */
 export const COLUMNS = [
-  { key: 'index', label: '#', sortable: false, align: 'right', width: '52px' },
-  { key: 'team_name', label: 'Tim', sortable: true, width: 'minmax(220px, 1.3fr)' },
-  { key: 'kontingen', label: 'Kontingen', sortable: true, width: 'minmax(200px, 1.2fr)' },
-  { key: 'unit_kerja', label: 'Unit Kerja', sortable: true, width: 'minmax(180px, 1fr)' },
-  { key: 'pic_name', label: 'PIC / Manager', sortable: true, width: 'minmax(160px, 1fr)' },
-  { key: 'member_count', label: 'Pemain', sortable: true, align: 'right', width: '90px' },
-  { key: 'submission_date', label: 'Didaftarkan', sortable: true, width: '130px' },
+  { key: 'index', label: '#', sortable: false, align: 'right', width: '46px' },
+  { key: 'team_name', label: 'Tim', sortable: true, width: '24%' },
+  { key: 'kontingen', label: 'Kontingen', sortable: true, width: '18%' },
+  { key: 'unit_kerja', label: 'Unit Kerja', sortable: true, width: '17%' },
+  { key: 'pic_name', label: 'PIC / Manager', sortable: true, width: '15%' },
+  { key: 'member_count', label: 'Pemain', sortable: true, align: 'right', width: '72px' },
+  { key: 'submission_date', label: 'Didaftarkan', sortable: true, width: '11%' },
 ];
+
+/** Lebar kolom aksi (menu ⋮). Dipakai team-table.js untuk kepala tabelnya. */
+export const LEBAR_AKSI = '44px';
 
 /* Ukuran halaman dikunci di 7 baris — tidak ada pemilih jumlah baris lagi. */
 export const PAGE_SIZE = 7;
