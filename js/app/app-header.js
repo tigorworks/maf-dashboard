@@ -4,7 +4,8 @@
 import { BaseElement, define } from '../core/element.js';
 import { css } from '../core/css.js';
 import { esc, formatDate } from '../core/format.js';
-import { caborTerkunci, clearGame, setShowCodes, store } from '../data/app-state.js';
+import { caborTerkunci, clearGame, setShowAudit, setShowCodes, store } from '../data/app-state.js';
+import { periksaSemua, ringkasan } from '../data/audit.js';
 import { GAME_META } from '../data/source.js';
 import { PERAN, keluar } from '../data/auth.js';
 
@@ -154,6 +155,27 @@ const styles = css`
   .kode-tim:hover {
     background: color-mix(in srgb, var(--brand-gold, var(--accent)) 22%, transparent);
   }
+  .notif {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px var(--sp-3);
+    font-size: var(--fs-sm);
+    font-weight: 700;
+    color: var(--text-muted);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-pill);
+  }
+  .notif svg {
+    width: 15px;
+    height: 15px;
+  }
+  .notif.ada {
+    color: var(--peringatan);
+    background: color-mix(in srgb, var(--peringatan) 13%, transparent);
+    border-color: color-mix(in srgb, var(--peringatan) 38%, transparent);
+  }
   .kode-tim svg {
     width: 15px;
     height: 15px;
@@ -301,6 +323,10 @@ export class AppHeader extends BaseElement {
     // Kode tim hanya berarti kalau ada cabor yang sedang dibuka — daftarnya
     // memang per cabor.
     const bisaLihatKode = !memuat && auth?.peran === PERAN.ADMIN && Boolean(filters.game);
+    // Notifikasi tidak menunggu cabor dipilih: temuannya lintas cabor, dan
+    // jumlahnya perlu terlihat sejak layar pertama panitia.
+    const bisaLihatAudit = !memuat && auth?.peran === PERAN.ADMIN;
+    const jumlahTemuan = bisaLihatAudit ? ringkasan(periksaSemua(store.state.teams)).total : 0;
     this.shadowRoot.innerHTML = `
       <div class="bar">
         <div class="brand">
@@ -340,14 +366,31 @@ export class AppHeader extends BaseElement {
 
         ${
           bisaLihatKode
-            ? `<button class="kode-tim" type="button" data-action="kode-tim" title="Daftar Kode Tim">
+            ? `<button class="kode-tim" type="button" data-action="kode-tim" title="Daftar kode kontingen yang aktif">
                  <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
                    <path d="M9.6 6.4a3.2 3.2 0 1 1-4.5 4.5l-2.7 2.7H1v-1.4l4.1-4.1a3.2 3.2 0 0 1 4.5-1.7Z"
                          stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
                    <path d="m10.4 5.6 4.6-4.6M12.4 3.6l1.4 1.4" stroke="currentColor"
                          stroke-width="1.4" stroke-linecap="round" />
                  </svg>
-                 <span>Kode Tim</span>
+                 <span>Kode</span>
+               </button>`
+            : ''
+        }
+        ${
+          /* Lonceng dengan angka temuan. Angkanya ditampilkan apa adanya —
+             termasuk saat nol, supaya "tidak ada masalah" juga terbaca sebagai
+             jawaban, bukan sebagai tombol yang lupa memuat. */
+          bisaLihatAudit
+            ? `<button class="notif ${jumlahTemuan ? 'ada' : ''}" type="button"
+                       data-action="audit" title="Notifikasi pelanggaran aturan">
+                 <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                   <path d="M8 2a4 4 0 0 0-4 4c0 3-1.2 4-1.2 4h10.4S12 9 12 6a4 4 0 0 0-4-4Z"
+                         stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
+                   <path d="M6.6 12.4a1.6 1.6 0 0 0 2.8 0" stroke="currentColor"
+                         stroke-width="1.4" stroke-linecap="round" />
+                 </svg>
+                 <b>${jumlahTemuan}</b>
                </button>`
             : ''
         }
@@ -395,6 +438,11 @@ export class AppHeader extends BaseElement {
         this.emit('minta-masuk');
         return;
       }
+      if (event.target.closest('[data-action="audit"]')) {
+        setShowAudit(true);
+        return;
+      }
+
       if (event.target.closest('[data-action="kode-tim"]')) {
         setShowCodes(true);
         return;

@@ -21,11 +21,43 @@ const TIMEOUT = 25000;
 export const PERAN = { ADMIN: 'admin', RELAWAN: 'relawan', TIM: 'tim' };
 
 /**
- * Dua jenis Kode Tim. 'penuh' boleh menyunting roster DAN mengunggah; 'unggah'
- * hanya mengunggah berkas. Jenisnya melekat pada kode saat dibuat, jadi
+ * Tiga jenis Kode Tim, bertingkat. Jenisnya melekat pada kode saat dibuat, jadi
  * mengganti wewenang berarti membuat kode baru.
+ *
+ *   unggah : hanya mengunggah berkas
+ *   penuh  : menyunting roster + mengunggah
+ *   hapus  : semua yang di atas, ditambah menghapus tim
+ *
+ * Menghapus berdiri sebagai tingkat tersendiri dan sengaja TIDAK ikut dalam
+ * 'penuh': salah mengetik nick bisa dibetulkan menit berikutnya, sedangkan tim
+ * yang terhapus tidak bisa didaftarkan ulang oleh PIC-nya sama sekali.
  */
-export const JENIS_KODE = { PENUH: 'penuh', UNGGAH: 'unggah' };
+export const JENIS_KODE = { UNGGAH: 'unggah', PENUH: 'penuh', HAPUS: 'hapus' };
+
+/**
+ * Nama tiap jenis, satu tempat untuk seluruh layar.
+ *
+ * Ketiga layar yang menampilkannya — detail tim, dialog di daftar tim, dan
+ * halaman Kode Tim — dulu masing-masing menuliskan sendiri "Ubah data + unggah
+ * berkas". Dengan tingkat ketiga, kalimat yang berbeda-beda di tiap layar
+ * berhenti jadi soal rasa dan mulai jadi soal benar: `panjang` yang dibaca saat
+ * MEMILIH wewenang, `pendek` untuk penanda di sela baris.
+ */
+export const NAMA_JENIS = {
+  [JENIS_KODE.UNGGAH]: { pendek: 'unggah saja', panjang: 'Unggah berkas saja' },
+  [JENIS_KODE.PENUH]: { pendek: 'ubah + unggah', panjang: 'Ubah data + unggah berkas' },
+  [JENIS_KODE.HAPUS]: { pendek: 'ubah + hapus', panjang: 'Ubah data + hapus tim + unggah' },
+};
+
+/** Jenis yang dikenal; apa pun di luarnya jatuh ke yang PALING SEMPIT. */
+export function jenisKode(nilai) {
+  return NAMA_JENIS[nilai] ? nilai : JENIS_KODE.UNGGAH;
+}
+
+/** Nama jenis untuk ditampilkan. */
+export function namaJenis(nilai, bentuk = 'pendek') {
+  return NAMA_JENIS[jenisKode(nilai)][bentuk];
+}
 
 /* ------------------------------ cookie ------------------------------ */
 
@@ -105,21 +137,59 @@ export function adalahRelawan() {
   return sesi?.peran === PERAN.RELAWAN;
 }
 
-/** PIC tim: masuk dengan Kode Tim, wewenangnya terbatas pada satu tim. */
+/** PIC kontingen: masuk dengan Kode Tim, wewenangnya sebatas kontingennya. */
 export function adalahTim() {
   return sesi?.peran === PERAN.TIM;
 }
 
 /**
+ * Bentuk baku nama kontingen — salinan normalKontingen() di Code.gs.
+ *
+ * Hiasan seperti "*REGION XII*" dan spasi ganda dirapikan supaya satu kontingen
+ * tidak terpecah dua hanya karena beda penulisan antarbaris spreadsheet.
+ * Perbandingan di sini semata untuk TAMPILAN; yang menentukan tetap GAS, dan
+ * keduanya harus merapikan dengan cara yang sama agar tombol yang terlihat
+ * tidak menjanjikan sesuatu yang lalu ditolak server.
+ */
+export function normalKontingen(nama) {
+  return String(nama || '').replace(/[*_]/g, ' ').replace(/\s+/g, ' ').trim().toUpperCase();
+}
+
+/** Apakah tim ini berada di kontingen yang dipegang sesi sekarang? */
+function kontingenSendiri(team) {
+  const milik = sesi?.kontingen;
+  if (!milik) return false;
+  return normalKontingen(team?.kontingen) === normalKontingen(milik);
+}
+
+/**
  * Bolehkah sesi ini MENYUNTING tim tertentu?
  *
- * Admin: semua tim. PIC tim: timnya sendiri, dan hanya kalau kodenya berjenis
- * 'penuh' — kode 'unggah' memang tidak dimaksudkan menyentuh data.
- * Ini pertanyaan TAMPILAN; penolakan yang sesungguhnya tetap terjadi di GAS.
+ * Admin: semua tim. PIC kontingen: seluruh tim kontingennya — lintas cabor —
+ * dan hanya kalau kodenya berjenis 'penuh'; kode 'unggah' memang tidak
+ * dimaksudkan menyentuh data.
+ *
+ * Argumennya TIM, bukan teamId: satu kode kini mencakup banyak tim, jadi
+ * jawabannya bergantung pada kontingen tim itu dan bukan lagi pada satu id yang
+ * bisa dicocokkan langsung. Ini pertanyaan TAMPILAN; penolakan yang
+ * sesungguhnya tetap terjadi di GAS.
  */
-export function bolehSuntingTim(teamId) {
+export function bolehSuntingTim(team) {
   if (adalahAdmin()) return true;
-  return bolehUnggahTim(teamId) && sesi?.jenis === JENIS_KODE.PENUH;
+  return bolehUnggahTim(team) && jenisKode(sesi?.jenis) !== JENIS_KODE.UNGGAH;
+}
+
+/**
+ * Bolehkah sesi ini MENGHAPUS tim tertentu?
+ *
+ * Menuntut jenis 'hapus' — 'penuh' tidak cukup. Admin dijawab `false` di sini
+ * dengan sengaja: wewenangnya memang ada (GAS mengizinkannya), tapi jalurnya
+ * menu ⋮ di daftar tim, bukan tombol di halaman detail. Yang ditanyakan fungsi
+ * ini adalah "haruskah zona bahaya di detail tim muncul", dan jawabannya untuk
+ * admin adalah tidak.
+ */
+export function bolehHapusTim(team) {
+  return bolehUnggahTim(team) && !adalahAdmin() && jenisKode(sesi?.jenis) === JENIS_KODE.HAPUS;
 }
 
 /**
@@ -127,31 +197,31 @@ export function bolehSuntingTim(teamId) {
  * Kedua jenis kode boleh — itu justru satu-satunya hal yang bisa dilakukan
  * pemegang kode 'unggah'.
  */
-export function bolehUnggahTim(teamId) {
+export function bolehUnggahTim(team) {
   if (adalahAdmin()) return true;
-  return adalahTim() && Boolean(teamId) && sesi?.teamId === teamId;
+  return adalahTim() && kontingenSendiri(team);
 }
 
 /**
- * Admin dan relawan boleh melihat ID card tim mana pun; PIC tim hanya timnya
- * sendiri. GAS menolak sisanya, jadi meminta gambar tim lain hanya akan
- * menghasilkan kotak galat — lebih baik tidak diminta sama sekali.
+ * Admin dan relawan boleh melihat ID card tim mana pun; PIC kontingen hanya
+ * kontingennya sendiri. GAS menolak sisanya, jadi meminta gambar kontingen lain
+ * hanya akan menghasilkan kotak galat — lebih baik tidak diminta sama sekali.
  */
-export function bolehLihatIdCard(teamId) {
+export function bolehLihatIdCard(team) {
   if (!sesi) return false;
   if (!adalahTim()) return true;
-  return Boolean(teamId) && sesi.teamId === teamId;
+  return kontingenSendiri(team);
 }
 
 function pasangSesi(data, token) {
-  // teamId hanya terisi untuk peran tim. Ia datang dari GAS, bukan dari apa pun
-  // yang bisa disetel di browser — di sini ia sekadar dibawa agar tampilan tahu
-  // tim mana yang boleh disunting. Wewenang sesungguhnya tetap diperiksa ulang
-  // di GAS pada setiap permintaan.
+  // kontingen hanya terisi untuk peran tim. Ia datang dari GAS, bukan dari apa
+  // pun yang bisa disetel di browser — di sini ia sekadar dibawa agar tampilan
+  // tahu tim mana yang boleh disunting. Wewenang sesungguhnya tetap diperiksa
+  // ulang di GAS pada setiap permintaan.
   sesi = {
     nama: data.nama,
     peran: data.peran,
-    teamId: data.teamId || '',
+    kontingen: data.kontingen || '',
     jenis: data.jenis || '',
     token,
     sampai: Date.now() + IDLE_MS,
@@ -266,28 +336,55 @@ export async function ambilBerkas({ kind = 'idcard', playerId = '', teamId = '',
  * beberapa detik.
  */
 /**
- * Kode Tim beserta kontak PIC-nya. HANYA admin — GAS yang menegakkannya.
+ * Kode yang sedang aktif — SATU baris per kontingen — beserta kontak PIC-nya,
+ * berapa tim yang dicakupnya, dan cabor apa saja. HANYA admin; GAS yang
+ * menegakkannya.
  *
  * Data ini TIDAK ada di payload publik: Kode Tim dan No HP sengaja tidak pernah
  * dikirim di doGet, jadi satu-satunya jalannya adalah permintaan ber-token ini.
+ *
+ * Kontingen yang belum punya kode tidak muncul: daftar ini menjawab "kode apa
+ * yang sedang beredar", bukan "siapa saja pesertanya".
  */
-export async function ambilKodeTim({ game = '', teamId = '' } = {}) {
-  const hasil = await kirimTerautentikasi({ action: 'kodeTim', game, teamId });
+export async function ambilKodeTim() {
+  const hasil = await kirimTerautentikasi({ action: 'kodeTim' });
   return hasil.kode || [];
 }
 
 /**
  * Buat Kode Tim baru yang berlaku terbatas. HANYA admin — GAS menegakkannya.
- * Membuat ulang MENGGANTI kode sebelumnya: satu tim selalu punya paling banyak
- * satu kode hidup.
+ *
+ * Satuannya KONTINGEN, bukan tim: satu kontingen punya satu PIC yang mengurus
+ * seluruh timnya di semua cabor, jadi memberinya satu kode per tim hanya
+ * memperbanyak yang harus dibagikan tanpa mempersempit apa pun.
+ *
+ * Membuat ulang MENGGANTI kode sebelumnya: satu kontingen selalu punya paling
+ * banyak satu kode hidup.
+ *
+ * `teamId` boleh dipakai sebagai ganti nama kontingen — layar detail tim tahu
+ * timnya, dan GAS yang menyimpulkan kontingennya.
  */
-export async function buatKodeTim(teamId, jenis = JENIS_KODE.UNGGAH) {
-  const hasil = await kirimTerautentikasi({ action: 'buatKode', teamId, jenis });
+export async function buatKodeTim({ kontingen = '', teamId = '' }, jenis = JENIS_KODE.UNGGAH) {
+  const hasil = await kirimTerautentikasi({ action: 'buatKode', kontingen, teamId, jenis });
   return {
+    kontingen: hasil.kontingen || kontingen,
     kode: hasil.kode || '',
     jenis: hasil.jenis || JENIS_KODE.UNGGAH,
     sampai: Number(hasil.sampai || 0),
   };
+}
+
+/**
+ * Buat kode untuk SELURUH kontingen sekaligus. HANYA admin.
+ *
+ * Dipakai saat pengumpulan dibuka: tanpa ini panitia menekan tombol yang sama
+ * sebanyak jumlah kontingen. Kontingen yang sudah punya kode hidup ikut
+ * diperbarui — memang itu maksudnya: satu gelombang kode dengan masa berlaku
+ * seragam, sehingga tidak ada kode yang mati lebih dulu dari yang lain.
+ */
+export async function buatKodeSemua(jenis = JENIS_KODE.UNGGAH) {
+  const hasil = await kirimTerautentikasi({ action: 'buatKodeSemua', jenis });
+  return { dibuat: Number(hasil.dibuat || 0), kode: hasil.kode || [] };
 }
 
 /**
@@ -304,6 +401,17 @@ export async function aturKunciRoster(game, kunci) {
  * Konfirmasinya di layar (dialog), bukan lewat kiriman: yang menahan
  * penghapusan sembarangan adalah sesi admin.
  */
+/**
+ * Kontak PIC kontingen & PIC tim beserta nomornya. HANYA admin.
+ *
+ * Nomor telepon tidak pernah ikut payload publik, jadi layar notifikasi harus
+ * memintanya lewat jalur ber-token ini — sekali saat layarnya dibuka.
+ */
+export async function ambilKontak() {
+  const hasil = await kirimTerautentikasi({ action: 'kontak' });
+  return hasil.kontak || [];
+}
+
 /**
  * Buang SELURUH Kode Tim yang sedang aktif. HANYA admin.
  * Dipakai saat panitia ingin menghentikan semua akses peserta sekaligus —

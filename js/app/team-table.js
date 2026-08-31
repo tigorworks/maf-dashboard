@@ -9,7 +9,9 @@ import { BaseElement, define } from '../core/element.js';
 import { css } from '../core/css.js';
 import { esc, formatDate, highlight, hueOf, initials, jamMenit, num, sisaWaktu } from '../core/format.js';
 import { buangTim, COLUMNS, matchedMembers, selectTeam, setSort, store } from '../data/app-state.js';
-import { adalahAdmin, bolehUnggahTim, buatKodeTim, hapusTim, JENIS_KODE } from '../data/auth.js';
+import {
+  adalahAdmin, bolehUnggahTim, buatKodeTim, hapusTim, JENIS_KODE, namaJenis, normalKontingen,
+} from '../data/auth.js';
 import { periksaTim } from '../data/rules.js';
 import '../ui/ui-pagination.js';
 
@@ -446,6 +448,18 @@ const styles = css`
     line-height: 1.5;
     color: var(--text-muted);
   }
+  /* Akibat yang tidak bisa diperbaiki sesudahnya diberi bidangnya sendiri.
+     Di dalam paragraf biasa ia terbaca sebagai keterangan tambahan, padahal
+     justru inilah satu-satunya hal yang membedakan penghapusan ini dari
+     tindakan lain yang bisa dibatalkan. Selektornya menyebut .kotak p supaya
+     tidak kalah spesifik dari aturan warna di atasnya. */
+  .kotak p.tegas {
+    padding: var(--sp-3);
+    color: var(--text);
+    background: color-mix(in srgb, var(--peringatan) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--peringatan) 34%, transparent);
+    border-radius: var(--r-sm);
+  }
   .kotak b {
     color: var(--text);
   }
@@ -502,6 +516,18 @@ const styles = css`
     font-weight: 500;
     line-height: 1.4;
     color: var(--text-muted);
+  }
+  /* Pilihan terluas dibedakan warna, bukan hanya urutan: tiga kotak seragam
+     bertumpuk mengundang tekanan berdasarkan posisi, dan yang paling bawah —
+     paling dekat dengan jempol di ponsel — kebetulan yang paling berkuasa. */
+  .pilih-jenis button.bahaya {
+    border-color: color-mix(in srgb, var(--peringatan) 40%, transparent);
+  }
+  .pilih-jenis button.bahaya:hover {
+    border-color: var(--peringatan);
+  }
+  .pilih-jenis button.bahaya b {
+    color: var(--peringatan);
   }
 
   /* Kode dicetak besar, monospasi, dan BERWARNA LAIN dari seluruh isi dialog:
@@ -804,15 +830,16 @@ export class TeamTable extends BaseElement {
    * Isi menu ⋮ untuk SATU tim.
    *
    * Dibangun saat menunya dibuka, bukan sekali untuk seluruh tabel: butirnya
-   * kini bergantung pada tim yang ditunjuk. PIC tim yang sudah masuk hanya
-   * berwenang atas timnya sendiri, jadi menu di baris tim lain tidak boleh
+   * kini bergantung pada tim yang ditunjuk. PIC yang sudah masuk hanya berwenang
+   * atas kontingennya sendiri, jadi menu di baris kontingen lain tidak boleh
    * menawarkan unggahan yang pasti ditolak GAS.
    */
-  _isiMenu(teamId) {
-    // Unggah: admin untuk semua tim, PIC tim hanya untuk timnya. Pengunjung yang
-    // belum masuk tidak melihatnya sama sekali — sejak kode tidak lagi
-    // ditempelkan per unggahan, layar itu tidak punya jalan masuk untuknya.
-    const bolehUnggah = bolehUnggahTim(teamId);
+  _isiMenu(tim) {
+    // Unggah: admin untuk semua tim, PIC kontingen untuk seluruh tim
+    // kontingennya. Pengunjung yang belum masuk tidak melihatnya sama sekali —
+    // sejak kode tidak lagi ditempelkan per unggahan, layar itu tidak punya
+    // jalan masuk untuknya.
+    const bolehUnggah = bolehUnggahTim(tim);
 
     return `
         <button type="button" role="menuitem" data-act="lihat">
@@ -850,7 +877,7 @@ export class TeamTable extends BaseElement {
           adalahAdmin()
             ? `<button type="button" role="menuitem" data-act="kode">
                  ${IKON_KUNCI}
-                 Buat kode tim
+                 Buat kode kontingen
                </button>`
             : ''
         }
@@ -886,6 +913,10 @@ export class TeamTable extends BaseElement {
       <div class="lapis" role="dialog" aria-modal="true" aria-label="Hapus tim ${esc(h.nama)}">
         <div class="kotak bahaya">
           <h3>Hapus ${esc(h.nama)}?</h3>
+          <p class="tegas">
+            Setelah dihapus, <b>PIC tidak dapat menambahkan timnya kembali</b> —
+            pendaftaran tim hanya bisa dilakukan panitia. Harap berhati-hati.
+          </p>
           <p>
             Timnya dibuang dari daftar beserta seluruh berkasnya — logo, ID card,
             dan foto. Berkasnya masuk sampah Drive (tertahan 30 hari); barisnya
@@ -903,31 +934,45 @@ export class TeamTable extends BaseElement {
   }
 
   /**
-   * Kode tim yang baru dibuat, ditampilkan penuh untuk dicatat atau dibacakan.
+   * Kode yang baru dibuat, ditampilkan penuh untuk dicatat atau dibacakan.
    *
    * Sengaja tidak disembunyikan di balik tombol mata seperti di halaman detail:
    * kode ini baru saja diminta admin, umurnya 6 jam, dan satu-satunya gunanya
    * memang untuk diteruskan ke PIC.
+   *
+   * Judulnya menyebut KONTINGEN meskipun dibuka dari baris satu tim: kodenya
+   * berlaku untuk seluruh tim kontingen itu di semua cabor, dan admin harus
+   * tahu itu sebelum membagikannya — bukan setelah.
    */
   _kotakKode() {
     const k = this._kode;
     if (!k) return '';
     const sisa = k.sampai ? sisaWaktu(k.sampai) : '';
+    const cakupan = k.tim > 1
+      ? `Berlaku untuk <b>${k.tim} tim</b> kontingen ini.`
+      : 'Berlaku untuk seluruh tim kontingen ini.';
     return `
-      <div class="lapis" role="dialog" aria-modal="true" aria-label="Kode tim ${esc(k.nama)}">
+      <div class="lapis" role="dialog" aria-modal="true" aria-label="Kode kontingen ${esc(k.nama)}">
         <div class="kotak">
-          <h3>Kode tim ${esc(k.nama)}</h3>
+          <h3>Kode kontingen ${esc(k.nama)}</h3>
           ${
             k.memilih
-              ? `<p>Pilih wewenang yang diberikan kode ini. Keduanya berlaku 6 jam.</p>
+              ? `<p>${cakupan} Pilih wewenang yang diberikannya — ketiganya berlaku 6 jam.</p>
                  <div class="pilih-jenis">
-                   <button type="button" data-act="pilih-penuh">
-                     <b>Ubah data + unggah berkas</b>
-                     <small>Membetulkan nick, ID game, server; menambah pemain; mengunggah berkas.</small>
-                   </button>
                    <button type="button" data-act="pilih-unggah">
                      <b>Unggah berkas saja</b>
                      <small>Hanya logo, ID card, dan foto. Data pemain tidak bisa disentuh.</small>
+                   </button>
+                   <button type="button" data-act="pilih-penuh">
+                     <b>Ubah data + unggah berkas</b>
+                     <small>Membetulkan nick, ID game, server; menambah pemain; mengunggah berkas.
+                     Tidak bisa menghapus tim.</small>
+                   </button>
+                   <button type="button" class="bahaya" data-act="pilih-hapus">
+                     <b>Ubah data + hapus tim + unggah</b>
+                     <small>Semua di atas, ditambah menghapus tim. Tim yang dihapus PIC
+                     tidak bisa didaftarkan ulang olehnya — berikan hanya bila memang
+                     ada tim yang batal ikut.</small>
                    </button>
                  </div>`
               : k.sibuk
@@ -936,7 +981,8 @@ export class TeamTable extends BaseElement {
                 ? `<p class="lapis-galat">${esc(k.galat)}</p>`
                 : `<p class="kode-besar">${esc(k.kode)}</p>
                    <p>
-                     <b>${k.jenis === JENIS_KODE.PENUH ? 'Ubah data + unggah berkas' : 'Unggah berkas saja'}</b><br />
+                     <b>${esc(namaJenis(k.jenis, 'panjang'))}</b><br />
+                     ${cakupan}<br />
                      Berlaku ${esc(sisa)} lagi · sampai ${esc(jamMenit(k.sampai))}.
                      Setelah itu kode ini tidak bisa dipakai lagi.
                    </p>`
@@ -962,17 +1008,18 @@ export class TeamTable extends BaseElement {
       </div>`;
   }
 
-  /** Buat kode untuk satu tim, lalu tampilkan hasilnya. */
-  async _buatKode(teamId, nama, jenis) {
-    this._kode = { teamId, nama, jenis, memilih: false, sibuk: true, kode: '', sampai: 0, galat: '' };
+  /** Buat kode untuk satu KONTINGEN, lalu tampilkan hasilnya. */
+  async _buatKode(kontingen, tim, jenis) {
+    const dasar = { nama: kontingen, tim, jenis };
+    this._kode = { ...dasar, memilih: false, sibuk: true, kode: '', sampai: 0, galat: '' };
     this.render();
     try {
-      const hasil = await buatKodeTim(teamId, jenis);
-      this._kode = { teamId, nama, jenis: hasil.jenis, sibuk: false,
+      const hasil = await buatKodeTim({ kontingen }, jenis);
+      this._kode = { ...dasar, jenis: hasil.jenis, sibuk: false,
                      kode: hasil.kode, sampai: hasil.sampai, galat: '' };
     } catch (error) {
-      this._kode = { teamId, nama, jenis, sibuk: false, kode: '', sampai: 0,
-                     galat: error.message || 'Gagal membuat kode tim.' };
+      this._kode = { ...dasar, sibuk: false, kode: '', sampai: 0,
+                     galat: error.message || 'Gagal membuat kode kontingen.' };
     }
     this.render();
   }
@@ -1013,10 +1060,15 @@ export class TeamTable extends BaseElement {
       // Lapisan konfirmasi diperiksa PALING awal: ia menutupi tabel, dan
       // klik apa pun di dalamnya tidak boleh merembes jadi "buka tim".
       if (this._kode) {
-        const pilih = event.target.closest('[data-act="pilih-penuh"], [data-act="pilih-unggah"]');
+        const pilih = event.target.closest(
+          '[data-act="pilih-penuh"], [data-act="pilih-unggah"], [data-act="pilih-hapus"]'
+        );
         if (pilih) {
-          const jenis = pilih.dataset.act === 'pilih-penuh' ? JENIS_KODE.PENUH : JENIS_KODE.UNGGAH;
-          this._buatKode(this._kode.teamId, this._kode.nama, jenis);
+          const jenis = {
+            'pilih-hapus': JENIS_KODE.HAPUS,
+            'pilih-penuh': JENIS_KODE.PENUH,
+          }[pilih.dataset.act] || JENIS_KODE.UNGGAH;
+          this._buatKode(this._kode.nama, this._kode.tim, jenis);
           return;
         }
         if (event.target.closest('[data-act="salin-kode"]')) {
@@ -1063,7 +1115,14 @@ export class TeamTable extends BaseElement {
           const tim = store.state.teams.find((t) => t.team_id === teamId);
           // Belum membuat apa pun: dialognya bertanya dulu jenis wewenangnya.
           if (tim) {
-            this._kode = { teamId, nama: tim.team_name, memilih: true,
+            // Berapa tim yang ikut tercakup dihitung dari data yang SUDAH ada di
+            // layar — termasuk tim cabor lain, karena kodenya memang lintas
+            // cabor. Angka ini yang membuat admin sadar kode dari baris satu tim
+            // sebenarnya membuka beberapa tim sekaligus.
+            const cakupan = store.state.teams.filter(
+              (t) => normalKontingen(t.kontingen) === normalKontingen(tim.kontingen)
+            ).length;
+            this._kode = { nama: tim.kontingen, tim: cakupan, memilih: true,
                            jenis: '', sibuk: false, kode: '', sampai: 0, galat: '' };
             this.render();
           }
@@ -1160,7 +1219,7 @@ export class TeamTable extends BaseElement {
     burger.setAttribute('aria-expanded', 'true');
     // Isinya dibangun dulu: ukurannya menentukan penempatan, dan butirnya
     // berbeda-beda per tim.
-    menu.innerHTML = this._isiMenu(this._menuTeam);
+    menu.innerHTML = this._isiMenu(store.state.teams.find((t) => t.team_id === this._menuTeam));
     menu.hidden = false;
 
     const kotak = burger.getBoundingClientRect();

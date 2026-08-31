@@ -6,7 +6,7 @@
  *   #mlbb/tim/<team_id>        halaman verifikasi satu tim
  *   #mlbb/tim/<team_id>/berkas halaman unggah logo & ID card
  *   #mlbb/tim/<team_id>/foto   halaman unggah foto tim & pemain
- *   #mlbb/kode                 daftar Kode Tim (khusus admin)
+ *   #mlbb/kode                 daftar kode kontingen aktif (khusus admin)
  *
  * Alur:
  *   URL  -> store : saat halaman dimuat dan saat tombol back/forward ditekan

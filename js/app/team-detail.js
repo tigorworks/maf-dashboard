@@ -16,12 +16,13 @@ import { css } from '../core/css.js';
 import { esc, formatDate, hueOf, initials, num, sisaWaktu, year } from '../core/format.js';
 import { GAME_META } from '../data/source.js';
 import {
-  applyPlayerPatch, applyUpload, caborTerkunci, gantiRoster, selectTeam, store,
+  applyPlayerPatch, applyUpload, buangTim, caborTerkunci, gantiRoster, selectTeam, store,
 } from '../data/app-state.js';
 import { ACCEPTED_TYPES, uploadTeamFile } from '../data/upload.js';
 import {
   adalahAdmin, adalahTim, ambilIdCard, ambilKodeTim, bolehLihatIdCard,
-  bolehSuntingTim, bolehUnggahTim, buatKodeTim, JENIS_KODE, onAuth, sesiSekarang, simpanRoster,
+  bolehHapusTim, bolehSuntingTim, bolehUnggahTim, buatKodeTim, hapusTim, JENIS_KODE,
+  namaJenis, normalKontingen, onAuth, sesiSekarang, simpanRoster,
 } from '../data/auth.js';
 import { periksaTim } from '../data/rules.js';
 import { periksaNick } from '../data/nick.js';
@@ -564,6 +565,18 @@ const styles = css`
   .kode-buat:disabled {
     opacity: 0.55;
     cursor: progress;
+  }
+  /* Pilihan terluas dibedakan WARNA, bukan hanya urutan: tiga tombol seragam
+     berdampingan mengundang tekanan berdasarkan posisi, dan yang di ujung
+     kebetulan yang paling berkuasa. */
+  .kode-buat.bahaya {
+    color: var(--peringatan);
+    border-color: color-mix(in srgb, var(--peringatan) 45%, transparent);
+  }
+  .kode-buat.bahaya:hover {
+    color: #fff;
+    background: var(--peringatan);
+    border-color: var(--peringatan);
   }
   .pj-kosong {
     margin: 0;
@@ -1423,6 +1436,118 @@ const styles = css`
     gap: var(--sp-2);
   }
 
+  /* --- zona bahaya: hapus tim (PIC) ---
+     Ditaruh di DASAR halaman, terpisah dari segala yang lain. Aksinya tidak
+     bisa dibatalkan dan tidak bisa diulang sendiri oleh PIC, jadi ia tidak
+     boleh berada dalam jangkauan jempol yang sedang mengerjakan hal lain —
+     mencapainya harus berarti menggulir melewati seluruh roster lebih dulu. */
+  .zona-bahaya {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    margin-top: var(--sp-7);
+    padding: var(--sp-4) var(--tepi, var(--sp-6));
+    border-top: 1px solid color-mix(in srgb, var(--peringatan) 28%, transparent);
+  }
+  .zona-bahaya .ket {
+    flex: 1;
+    min-width: 0;
+    font-size: var(--fs-sm);
+    line-height: 1.5;
+    color: var(--text-muted);
+  }
+  .zona-bahaya .ket b {
+    display: block;
+    color: var(--peringatan);
+  }
+  .zona-bahaya button {
+    flex: none;
+    height: 40px;
+    padding: 0 var(--sp-4);
+    font-size: var(--fs-sm);
+    font-weight: 700;
+    color: var(--peringatan);
+    background: none;
+    border: 1px solid color-mix(in srgb, var(--peringatan) 45%, transparent);
+    border-radius: var(--r-sm);
+  }
+  .zona-bahaya button:hover {
+    color: #fff;
+    background: var(--peringatan);
+    border-color: var(--peringatan);
+  }
+
+  /* --- lapisan konfirmasi hapus --- */
+  .lapis {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    display: grid;
+    place-items: center;
+    padding: var(--sp-4);
+    background: rgba(4, 8, 20, 0.72);
+    backdrop-filter: blur(3px);
+  }
+  .kotak {
+    width: min(460px, 100%);
+    max-height: 100%;
+    padding: var(--sp-5);
+    overflow: auto;
+    background: var(--surface);
+    border: 1px solid var(--peringatan);
+    border-radius: var(--r-md);
+  }
+  .kotak h3 {
+    margin: 0 0 var(--sp-2);
+    font-size: var(--fs-lg);
+    color: var(--peringatan);
+  }
+  .kotak p {
+    margin: 0 0 var(--sp-3);
+    font-size: var(--fs-sm);
+    line-height: 1.55;
+    color: var(--text-muted);
+  }
+  .kotak p b {
+    color: var(--text);
+  }
+  /* Peringatan yang paling menentukan diberi bidangnya sendiri: di dalam
+     paragraf biasa ia terbaca sebagai keterangan tambahan, padahal justru
+     inilah satu-satunya hal yang tidak bisa diperbaiki sesudahnya. */
+  .kotak p.tegas {
+    padding: var(--sp-3);
+    color: var(--text);
+    background: color-mix(in srgb, var(--peringatan) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--peringatan) 34%, transparent);
+    border-radius: var(--r-sm);
+  }
+  .kotak p.lapis-galat {
+    color: var(--peringatan);
+  }
+  .lapis-aksi {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--sp-2);
+  }
+  .lapis-aksi button {
+    height: 42px;
+    padding: 0 var(--sp-4);
+    font-size: var(--fs-sm);
+    font-weight: 700;
+    color: var(--text-muted);
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+  }
+  .lapis-aksi button.bahaya {
+    color: #fff;
+    background: var(--peringatan);
+    border-color: var(--peringatan);
+  }
+  .lapis-aksi button[disabled] {
+    opacity: 0.55;
+  }
+
   /* --- penampil ID card --- */
   .lihat-idcard {
     position: fixed;
@@ -1600,6 +1725,33 @@ const styles = css`
       padding: 2px 0;
       font-size: var(--fs-xs);
     }
+
+    /* Zona bahaya menumpuk: sebaris, tombolnya terjepit di sisa lebar setelah
+       keterangan — dan tombol sempit adalah tombol yang tertekan setengah
+       sengaja. Ditumpuk, ia selebar layar dan jelas apa yang ditekan. */
+    .zona-bahaya {
+      flex-direction: column;
+      align-items: stretch;
+      gap: var(--sp-3);
+    }
+    .zona-bahaya button {
+      width: 100%;
+    }
+    /* Dialognya menempel ke dasar layar: di ponsel, kotak yang melayang di
+       tengah menaruh tombolnya jauh dari jempol. */
+    .lapis {
+      place-items: end stretch;
+      padding: 0;
+    }
+    .kotak {
+      width: 100%;
+      border-radius: var(--r-md) var(--r-md) 0 0;
+      padding-bottom: calc(var(--sp-5) + env(safe-area-inset-bottom, 0px));
+    }
+    .lapis-aksi button {
+      flex: 1;
+      height: 46px;
+    }
   }
   @media (max-width: 460px) {
     h2 {
@@ -1695,6 +1847,24 @@ const ICON_SUNTING = `<svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
         stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>`;
 
+/**
+ * Baris kode milik kontingen tim ini, dari daftar seluruh kode aktif.
+ *
+ * daftarKode di GAS menjawab per KONTINGEN, bukan per tim: satu kode mencakup
+ * semua tim satu kontingen di semua cabor. Panel ini hanya butuh satu barisnya,
+ * dan mencocokkannya lewat nama kontingen yang sudah dibakukan — penulisan di
+ * spreadsheet tidak seragam ("*REGION XII*" vs "REGION XII"), dan pencocokan
+ * mentah akan menyimpulkan "belum ada kode" untuk kode yang sebenarnya ada.
+ *
+ * Bentuk kembaliannya sengaja sama dengan yang dipakai render: tidak ketemu
+ * berarti kode kosong, bukan galat.
+ */
+function kodeKontingen(daftar, team) {
+  const milik = normalKontingen(team?.kontingen);
+  const baris = (daftar || []).find((k) => normalKontingen(k.kontingen) === milik);
+  return { kode: baris?.kode || '', jenis: baris?.jenis || '', sampai: baris?.sampai || 0 };
+}
+
 export class TeamDetail extends BaseElement {
   static styles = [styles];
 
@@ -1724,6 +1894,8 @@ export class TeamDetail extends BaseElement {
     this._menyimpan = false;
     // Kemajuan pengiriman antrean berkas: { selesai, total, nama }.
     this._progres = null;
+    // Konfirmasi hapus tim (PIC): { teamId, nama, sibuk, galat }.
+    this._hapus = null;
   }
 
   render() {
@@ -1741,15 +1913,16 @@ export class TeamDetail extends BaseElement {
     // GAS: menyalakan tombol lewat DevTools tidak memberi hak apa pun.
     const sesi = sesiSekarang();
     const admin = adalahAdmin();
-    // PIC tim: boleh menyunting, tapi hanya timnya sendiri dan hanya sebagian.
-    const timSendiri = adalahTim() && bolehSuntingTim(team.team_id);
+    // PIC kontingen: boleh menyunting, tapi hanya tim kontingennya sendiri dan
+    // hanya sebagian field.
+    const timSendiri = adalahTim() && bolehSuntingTim(team);
     // Roster terkunci menutup penyuntingan peserta — termasuk pemegang kode
     // "ubah + unggah". GAS sudah menolaknya; tombolnya disembunyikan di sini
     // supaya penolakan itu tidak datang sebagai kegagalan simpan setelah
     // seseorang selesai mengetik.
     const bolehUbah = admin || (timSendiri && !caborTerkunci(team.game));
     // ID card tim lain tidak akan dikirim GAS, jadi jangan diminta sama sekali.
-    const bolehIdCard = bolehLihatIdCard(team.team_id);
+    const bolehIdCard = bolehLihatIdCard(team);
 
     // Keadaan Kode Tim ditanyakan sekali saat panel dibuka.
     //
@@ -1776,7 +1949,7 @@ export class TeamDetail extends BaseElement {
     // dipakai saat masuk, jadi tidak ada gunanya membuka layar yang pasti
     // ditolak GAS. Alamat yang diketik tangan pun jatuh ke layar verifikasi.
     // Menyunting menuntut kode 'penuh'; mengunggah cukup dengan kode mana pun.
-    const bolehUnggah = bolehUnggahTim(team.team_id);
+    const bolehUnggah = bolehUnggahTim(team);
     const unggah = this._mode === 'berkas' && bolehUnggah;
     const foto = this._mode === 'foto' && bolehUnggah;
     // Berkas yang sudah dipilih tapi belum terkirim. Angkanya dipakai bilah
@@ -1894,10 +2067,12 @@ export class TeamDetail extends BaseElement {
                    </button>
                  </div>`
               : ''
-          }`
+          }
+          ${this._zonaBahaya(team)}`
           }
         </div>
 
+        ${this._kotakHapus()}
         ${this._lihat ? this._penampilIdCard() : ''}
       </section>`;
 
@@ -2204,9 +2379,9 @@ export class TeamDetail extends BaseElement {
       const nota = k?.memuat ? 'memeriksa kode aktif…' : k?.galat ? k.galat : 'belum ada kode aktif';
       return `
         <div class="pj-grup">
-          <h3>Kode tim</h3>
+          <h3>Kode kontingen</h3>
           <div class="kode-baris">
-            ${k?.memuat ? '' : this._tombolBuatKode('Buat kode tim')}
+            ${k?.memuat ? '' : this._tombolBuatKode('Buat kode kontingen')}
             ${this._pilihJenis ? '' : `<span class="kode-nota">${esc(nota)}</span>`}
           </div>
         </div>`;
@@ -2214,21 +2389,22 @@ export class TeamDetail extends BaseElement {
 
     return `
       <div class="pj-grup">
-        <h3>Kode tim</h3>
+        <h3>Kode kontingen</h3>
         <div class="kode-baris">
           <span class="kode-nilai ${terbuka ? 'terbuka' : ''}">
             ${terbuka ? esc(k.kode) : '•'.repeat(panjang)}
           </span>
           <button class="kode-mata" type="button" data-act="lihat-kode"
-                  title="${terbuka ? 'Sembunyikan kode' : 'Tampilkan kode tim'}"
+                  title="${terbuka ? 'Sembunyikan kode' : 'Tampilkan kode kontingen'}"
                   aria-pressed="${terbuka}"
-                  aria-label="${terbuka ? 'Sembunyikan kode tim' : 'Tampilkan kode tim'}">
+                  aria-label="${terbuka ? 'Sembunyikan kode kontingen' : 'Tampilkan kode kontingen'}">
             ${terbuka ? IKON_MATA_TUTUP : IKON_MATA}
           </button>
           ${
             terbuka
               ? `<button class="kode-salin ${this._kodeTersalin ? 'selesai' : ''}" type="button"
-                         data-act="salin-kode" title="Salin kode tim" aria-label="Salin kode tim">
+                         data-act="salin-kode" title="Salin kode kontingen"
+                         aria-label="Salin kode kontingen">
                    ${this._kodeTersalin ? IKON_CEK : ICON_SALIN}
                  </button>`
               : ''
@@ -2242,9 +2418,7 @@ export class TeamDetail extends BaseElement {
                keduanya tersedia saat benar-benar dibutuhkan: pada detik
                seseorang menimbang menekannya. */
             adaKode
-              ? `<span class="kode-jenis">${
-                   k.jenis === JENIS_KODE.PENUH ? 'ubah + unggah' : 'unggah saja'
-                 }</span>
+              ? `<span class="kode-jenis">${esc(namaJenis(k.jenis))}</span>
                  ${this._tombolBuatKode('')}`
               : ''
           }
@@ -2268,14 +2442,22 @@ export class TeamDetail extends BaseElement {
     }
 
     if (this._pilihJenis) {
+      // Urutannya dari yang paling sempit ke yang paling luas, dan yang paling
+      // luas diberi penanda bahaya. Menaruh "hapus" di ujung membuat pilihan
+      // bawaan — yang paling dekat, paling mudah ditekan — tetap yang paling
+      // aman, alih-alih yang paling berkuasa.
       return `
+        <button class="kode-buat" type="button" data-act="buat-kode-unggah"
+                title="Hanya mengunggah logo, ID card, dan foto. Berlaku 6 jam untuk SELURUH tim kontingen ini.">
+          Unggah saja
+        </button>
         <button class="kode-buat" type="button" data-act="buat-kode-penuh"
-                title="Membetulkan nick, ID game, server; menambah pemain; plus unggah berkas. Berlaku 6 jam.">
+                title="Membetulkan nick, ID game, server; menambah pemain; plus unggah berkas. TIDAK bisa menghapus tim. Berlaku 6 jam untuk SELURUH tim kontingen ini.">
           Ubah + unggah
         </button>
-        <button class="kode-buat" type="button" data-act="buat-kode-unggah"
-                title="Hanya mengunggah logo, ID card, dan foto. Berlaku 6 jam.">
-          Unggah saja
+        <button class="kode-buat bahaya" type="button" data-act="buat-kode-hapus"
+                title="Semua di atas, DITAMBAH menghapus tim. Tim yang dihapus PIC tidak bisa didaftarkan ulang olehnya. Berlaku 6 jam untuk SELURUH tim kontingen ini.">
+          Ubah + hapus
         </button>
         <button class="kode-mata" type="button" data-act="batal-pilih-kode"
                 aria-label="Batal membuat kode" title="Batal">
@@ -2285,16 +2467,21 @@ export class TeamDetail extends BaseElement {
 
     return label
       ? `<button class="kode-buat" type="button" data-act="pilih-jenis-kode"
-                 title="Kode berlaku 6 jam sejak dibuat">${esc(label)}</button>`
+                 title="Kode berlaku 6 jam sejak dibuat, untuk seluruh tim kontingen ini">${esc(label)}</button>`
       : `<button class="kode-mata" type="button" data-act="pilih-jenis-kode"
-                 aria-label="Buat ulang kode tim"
+                 aria-label="Buat ulang kode kontingen"
                  title="Buat ulang kode — membuat ulang membatalkan yang sekarang">
            ${IKON_ULANG}
          </button>`;
   }
 
   /**
-   * Buat Kode Tim baru untuk tim yang sedang dibuka.
+   * Buat Kode Tim baru untuk KONTINGEN tim yang sedang dibuka.
+   *
+   * Dibuat dari sini karena di sinilah panitia sedang melihat timnya, bukan
+   * karena kodenya milik tim ini: satu kode mencakup seluruh tim kontingen yang
+   * sama di semua cabor. Pesan hasilnya menyebutkan itu terang-terangan supaya
+   * cakupannya tidak baru diketahui setelah kode terlanjur dibagikan.
    *
    * Hasilnya langsung ditampilkan terbuka: kode ini baru saja dibuat atas
    * permintaan admin dan memang untuk dibacakan ke PIC — menyembunyikannya lagi
@@ -2308,21 +2495,29 @@ export class TeamDetail extends BaseElement {
     this._pilihJenis = false;
     this.render();
     try {
-      const hasil = await buatKodeTim(team.team_id, jenis);
+      // teamId dikirim, bukan nama kontingennya: GAS yang menyimpulkan
+      // kontingen tim ini, sehingga hanya ada SATU tempat yang memutuskan
+      // kontingen mana yang dimaksud.
+      const hasil = await buatKodeTim({ teamId: team.team_id }, jenis);
       this._kodeTim = { kode: hasil.kode, jenis: hasil.jenis, sampai: hasil.sampai };
       this._kodeTampil = true;
       this._kodeSibuk = false;
       this.render();
-      this._pesan(`Kode tim dibuat, berlaku ${sisaWaktu(hasil.sampai)}.`, 'sukses');
+      this._pesan(
+        `Kode ${namaJenis(hasil.jenis)} dibuat untuk kontingen ` +
+          `${hasil.kontingen || team.kontingen} — berlaku untuk SEMUA timnya, ` +
+          `${sisaWaktu(hasil.sampai)} lagi.`,
+        'sukses'
+      );
     } catch (error) {
       this._kodeSibuk = false;
       this.render();
-      this._pesan(error.message || 'Gagal membuat kode tim.', 'galat');
+      this._pesan(error.message || 'Gagal membuat kode kontingen.', 'galat');
     }
   }
 
   /**
-   * Ambil keadaan Kode Tim untuk tim yang sedang dibuka — sekali saja.
+   * Ambil keadaan kode untuk KONTINGEN tim yang sedang dibuka — sekali saja.
    *
    * Kodenya ikut terbawa, tapi TETAP TERTUTUP di layar sampai tombol mata
    * ditekan. Itu menjaga alasan aslinya: kredensial tidak seharusnya tergeletak
@@ -2340,13 +2535,8 @@ export class TeamDetail extends BaseElement {
     // memanggil fungsi ini.
     this._kodeTim = { memuat: true };
     try {
-      const daftar = await ambilKodeTim({ teamId: team.team_id });
-      // Daftar kosong = belum ada kode aktif. Bukan galat.
-      this._kodeTim = {
-        kode: daftar[0]?.kode || '',
-        jenis: daftar[0]?.jenis || '',
-        sampai: daftar[0]?.sampai || 0,
-      };
+      // Kosong = kontingen ini belum punya kode aktif. Bukan galat.
+      this._kodeTim = kodeKontingen(await ambilKodeTim(), team);
     } catch (error) {
       this._kodeTim = { galat: error.message || 'Gagal mengambil kode' };
     }
@@ -2376,13 +2566,7 @@ export class TeamDetail extends BaseElement {
     this.render();
 
     try {
-      const daftar = await ambilKodeTim({ teamId: team.team_id });
-      // Daftar kosong berarti belum ada kode aktif — bukan galat.
-      this._kodeTim = {
-        kode: daftar[0]?.kode || '',
-        jenis: daftar[0]?.jenis || '',
-        sampai: daftar[0]?.sampai || 0,
-      };
+      this._kodeTim = kodeKontingen(await ambilKodeTim(), team);
       this._kodeTampil = true;
     } catch (error) {
       this._kodeTim = { galat: error.message || 'Gagal mengambil kode' };
@@ -2417,6 +2601,98 @@ export class TeamDetail extends BaseElement {
   }
 
   /** Lapisan penuh di atas panel untuk memeriksa satu ID card. */
+  /**
+   * Tombol hapus tim untuk PIC — di dasar layar, bukan di menu ⋮.
+   *
+   * Sengaja TIDAK ditampilkan untuk admin: admin sudah punya jalurnya di menu ⋮
+   * daftar tim, dan menghadirkan aksi yang tak bisa dibatalkan di dua tempat
+   * hanya menggandakan kesempatan salah tekan tanpa menambah kemampuan apa pun.
+   *
+   * Menuntut kode jenis 'hapus' — 'penuh' tidak cukup. Itulah gunanya tingkat
+   * ketiga: kode yang dibagikan untuk membetulkan nickname tidak ikut memasang
+   * tombol yang tak bisa ditarik kembali di dasar halaman. Roster yang terkunci
+   * ikut menutupnya, dan GAS menolaknya lagi kalau tombolnya dinyalakan lewat
+   * DevTools. Disembunyikan pula selagi mode ubah aktif: layar itu tentang
+   * menyimpan perubahan, dan tombol yang membuang segalanya tidak pantas
+   * berdiri di sana.
+   */
+  _zonaBahaya(team) {
+    if (!bolehHapusTim(team) || caborTerkunci(team.game) || this._sunting) return '';
+    return `
+      <div class="zona-bahaya">
+        <span class="ket">
+          <b>Batal ikut turnamen?</b>
+          Menghapus ${esc(team.team_name)} membuang timnya beserta seluruh berkasnya.
+        </span>
+        <button type="button" data-act="minta-hapus">Hapus tim</button>
+      </div>`;
+  }
+
+  /**
+   * Konfirmasi hapus tim.
+   *
+   * Yang wajib terbaca di sini bukan "berkasnya ikut terhapus" — itu bisa
+   * ditarik dari sampah Drive — melainkan bahwa PIC TIDAK BISA mendaftarkan
+   * timnya kembali sendiri. Pendaftaran berjalan lewat form panitia, bukan
+   * lewat dashboard ini, jadi tombol ini satu arah bagi peserta. Kalimat itu
+   * diberi bidangnya sendiri supaya tidak terlewat sebagai keterangan kecil.
+   */
+  _kotakHapus() {
+    const h = this._hapus;
+    if (!h) return '';
+    return `
+      <div class="lapis" role="dialog" aria-modal="true"
+           aria-label="Hapus tim ${esc(h.nama)}">
+        <div class="kotak">
+          <h3>Hapus ${esc(h.nama)}?</h3>
+          <p class="tegas">
+            Setelah dihapus, <b>Anda tidak dapat menambahkan tim ini kembali</b>.
+            Pendaftaran tim hanya bisa dilakukan panitia, jadi harap berhati-hati
+            — hubungi panitia dulu bila masih ragu.
+          </p>
+          <p>
+            Seluruh berkas timnya ikut dibuang: logo, ID card, dan foto. Berkasnya
+            masih tertahan 30 hari di sampah Drive panitia, tetapi data timnya
+            sendiri langsung hilang dari daftar.
+          </p>
+          ${h.galat ? `<p class="lapis-galat">${esc(h.galat)}</p>` : ''}
+          <div class="lapis-aksi">
+            <button type="button" data-act="batal-hapus" ${h.sibuk ? 'disabled' : ''}>
+              Batal
+            </button>
+            <button type="button" class="bahaya" data-act="ya-hapus" ${h.sibuk ? 'disabled' : ''}>
+              ${h.sibuk ? 'Menghapus…' : 'Ya, hapus tim'}
+            </button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  /**
+   * Jalankan penghapusan, lalu tinggalkan halaman timnya.
+   *
+   * Store dibersihkan sendiri alih-alih memuat ulang seluruh data: daftar tim,
+   * kartu ringkasan, dan penyaring kontingen semuanya diturunkan dari state
+   * yang sama, jadi membuang satu baris di sana sudah membuat seluruh layar
+   * sepakat — tanpa satu pun permintaan tambahan ke GAS.
+   */
+  async _jalankanHapus() {
+    const h = this._hapus;
+    if (!h || h.sibuk) return;
+    this._hapus = { ...h, sibuk: true, galat: '' };
+    this.render();
+    try {
+      await hapusTim(h.teamId);
+      this._hapus = null;
+      buangTim(h.teamId);
+      // Panelnya menampilkan tim yang sudah tidak ada; kembali ke daftar.
+      selectTeam(null);
+    } catch (error) {
+      this._hapus = { ...h, sibuk: false, galat: error.message || 'Gagal menghapus tim.' };
+      this.render();
+    }
+  }
+
   _penampilIdCard() {
     const v = this._lihat;
     return `
@@ -2441,7 +2717,7 @@ export class TeamDetail extends BaseElement {
     const nick = member.game_nick || '';
     // Nick wajib berformat "INISIAL. NAMA". Ditandai di kartunya sendiri, bukan
     // hanya dihitung di lencana tabel: yang memperbaikinya perlu tahu SIAPA.
-    const hasilNick = periksaNick(nick);
+    const hasilNick = periksaNick(nick, this._team?.game);
     const nickSalah = hasilNick.ok ? '' : hasilNick.pesan;
     const nama = member.full_name || nick || '—';
     const tone = STATUS_TONE[member.status] || 'var(--text-muted)';
@@ -2912,6 +3188,10 @@ export class TeamDetail extends BaseElement {
           this._kodeMemuat = false;
           this._pilihJenis = false;
           this._kodeTampil = false;
+          // Dialog hapus menunjuk tim TERTENTU; membiarkannya terbuka saat tim
+          // berganti berarti tombol "Ya, hapus" menghapus tim yang tidak lagi
+          // terlihat di layar.
+          this._hapus = null;
           this._lepasPilihan();
         }
         // Mode ditentukan menu baris: "Unggah berkas" -> layar unggah,
@@ -2932,12 +3212,43 @@ export class TeamDetail extends BaseElement {
     this.track(
       onAuth(() => {
         if (this._sunting && !this._bolehUbah()) this._sunting = false;
+        // Sesi habis di tengah konfirmasi: dialognya ditutup, bukan dibiarkan
+        // menawarkan tombol yang pasti dijawab "Sesi berakhir" oleh GAS.
+        if (this._hapus && !this._bolehUbah()) this._hapus = null;
         if (this._lihat && !sesiSekarang()) this._lihat = null;
         if (this._team) this.requestRender();
       })
     );
 
     this.listen(this.shadowRoot, 'click', (event) => {
+      // Lapisan konfirmasi hapus diperiksa PALING awal: ia menutupi seluruh
+      // panel, dan klik apa pun di dalamnya tidak boleh merembes menjadi aksi
+      // di layar yang tertutup di belakangnya.
+      if (this._hapus) {
+        if (event.target.closest('[data-act="ya-hapus"]')) {
+          this._jalankanHapus();
+          return;
+        }
+        // Selagi penghapusan berjalan, menutup dialog hanya menyembunyikan
+        // permintaan yang tetap jalan — dan hasilnya tidak pernah terbaca.
+        if (this._hapus.sibuk) return;
+        // Klik di luar kotak = batal, sama dengan menekan Batal.
+        if (event.target.closest('[data-act="batal-hapus"]') || !event.target.closest('.kotak')) {
+          this._hapus = null;
+          this.render();
+        }
+        return;
+      }
+
+      if (event.target.closest('[data-act="minta-hapus"]')) {
+        const team = this._team;
+        if (team) {
+          this._hapus = { teamId: team.team_id, nama: team.team_name, sibuk: false, galat: '' };
+          this.render();
+        }
+        return;
+      }
+
       if (event.target.closest('[data-act="tutup-idcard"]')) {
         this._lihat = null;
         this.render();
@@ -2968,6 +3279,10 @@ export class TeamDetail extends BaseElement {
       }
       if (event.target.closest('[data-act="buat-kode-unggah"]')) {
         this._buatKode(JENIS_KODE.UNGGAH);
+        return;
+      }
+      if (event.target.closest('[data-act="buat-kode-hapus"]')) {
+        this._buatKode(JENIS_KODE.HAPUS);
         return;
       }
       if (event.target.closest('[data-act="pilih-jenis-kode"]')) {
@@ -3230,7 +3545,7 @@ export class TeamDetail extends BaseElement {
 
   /** Bolehkah sesi ini menyunting tim yang sedang dibuka? */
   _bolehUbah() {
-    return adalahAdmin() || bolehSuntingTim(this._team?.team_id);
+    return adalahAdmin() || bolehSuntingTim(this._team);
   }
 
   /**
@@ -3381,9 +3696,9 @@ export class TeamDetail extends BaseElement {
     // Wewenangnya sudah dibuktikan sesi; tidak ada kode yang perlu dibaca dari
     // layar. Kalau sesinya tidak berhak, GAS yang menolak — dan pesannya
     // diteruskan apa adanya ke bilah pesan.
-    if (!bolehUnggahTim(team.team_id)) {
+    if (!bolehUnggahTim(team)) {
       batal();
-      this._pesan('Masuk dulu dengan Kode Tim tim ini untuk mengunggah berkas.', 'galat');
+      this._pesan('Masuk dulu dengan Kode Tim kontingen ini untuk mengunggah berkas.', 'galat');
       return;
     }
 
