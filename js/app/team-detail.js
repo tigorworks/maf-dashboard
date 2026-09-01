@@ -41,6 +41,7 @@ const styles = css`
   }
 
   .panel {
+    position: relative;
     display: flex;
     flex-direction: column;
     width: 100%;
@@ -48,6 +49,36 @@ const styles = css`
        sama dengan daftar tim. Tanpa ini, di layar 1500 px+ nama dan angka
        terlempar ke dua ujung layar. */
     --tepi: max(var(--sp-6), calc((100% - var(--maxw)) / 2));
+  }
+  /* Logo tim sebagai watermark di balik SELURUH panel — HANYA saat logonya
+     ada; lihat --logo-tim yang diset lewat inline style di bawah judul ini
+     sama sekali tidak ditulis tanpa team.logo_url, jadi var() jatuh ke
+     `none` dan tidak ada gambar sama sekali.
+     Dicoba lebih dulu sebagai <img> di belakang grid roster (z-index:-1
+     pada .roster) — gagal: kartu roster punya latar OPAK (.roster li),
+     jadi z-index negatif menaruhnya di belakang kartu itu sendiri dan nyaris
+     seluruhnya tertutup. Dipindah ke sini persis meniru pola yang sudah
+     terbukti jalan di team-table.js: dilukis di permukaan PANEL (bukan di
+     belakang kartu), lalu isi panel (header + .body) dinaikkan z-index:1
+     supaya watermark tetap di paling belakang tanpa terhalang. */
+  .panel::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image: var(--logo-tim, none);
+    background-repeat: no-repeat;
+    background-position: right bottom;
+    background-size: auto min(280px, 42%);
+    opacity: 0.07;
+    filter: grayscale(1);
+  }
+  /* header punya position/z-index sendiri (sticky, z-index:10) — sudah di
+     atas watermark tanpa disentuh. Hanya .body yang perlu dinaikkan. */
+  .panel > .body {
+    position: relative;
+    z-index: 1;
   }
   header,
   .pj,
@@ -976,42 +1007,7 @@ const styles = css`
 
   /* ================= lineup ================= */
   .roster {
-    position: relative;
-    /* Menahan logo watermark agar tidak pernah meluber keluar kotaknya sendiri
-       — logo yang diunggah PIC bisa berbentuk apa saja, tidak seperti aset MAF
-       yang dikurasi rapi. */
-    overflow: hidden;
     padding: var(--sp-5) var(--sp-6) var(--sp-6);
-  }
-  /* Logo tim sebagai watermark di balik roster — HANYA saat logonya ada; lihat
-     markup, <img>-nya sama sekali tidak dirender tanpa team.logo_url.
-     Kanan-bawah dipilih supaya tidak bersaing dengan nomor slot pertama yang
-     selalu duduk di kiri-atas grid (lihat .slot).
-     Grayscale + opasitas rendah menyeragamkan tampilannya: logo ini diunggah
-     PIC sendiri dalam bentuk dan warna apa pun, bukan aset yang dikurasi
-     seperti logo MAF — tanpa penyeragaman ini, logo yang kontras/terang akan
-     bersaing dengan teks kartu di depannya alih-alih diam di latar.
-     z-index -1 dari .roster yang position:relative, bukan urutan DOM: itu
-     menjaminnya tetap di belakang seluruh isi roster apa pun urutan
-     render-nya, tanpa perlu menandai tiap elemen lain dengan z-index sendiri. */
-  .roster-logo {
-    position: absolute;
-    right: var(--sp-4);
-    bottom: var(--sp-4);
-    z-index: -1;
-    width: min(200px, 32%);
-    height: min(200px, 32%);
-    object-fit: contain;
-    opacity: 0.08;
-    filter: grayscale(1);
-    pointer-events: none;
-    user-select: none;
-  }
-  @media (max-width: 720px) {
-    .roster-logo {
-      width: 110px;
-      height: 110px;
-    }
   }
   .roster-head {
     display: flex;
@@ -2152,7 +2148,7 @@ export class TeamDetail extends BaseElement {
     this.shadowRoot.innerHTML = `
       <section class="panel ${unggah || foto ? 'mode-unggah' : 'mode-lihat'}${this._menyimpan ? ' menyimpan' : ''}"
                aria-label="${unggah ? 'Unggah berkas' : foto ? 'Unggah foto' : 'Detail'} tim ${esc(team.team_name)}"
-               style="--tone:${game.color}">
+               style="--tone:${game.color}${team.logo_url ? `;--logo-tim:url('${esc(team.logo_url)}')` : ''}">
         <header>
           <button class="kembali" type="button" data-act="kembali" aria-label="Kembali ke daftar tim">
             <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -2214,16 +2210,6 @@ export class TeamDetail extends BaseElement {
           ${this._pitaPic(team, pic)}
 
           <section class="roster">
-            ${
-              // Watermark, bukan informasi — aria-hidden dan tanpa alt text.
-              // onerror="this.remove()" sama seperti crest di daftar tim:
-              // tautan Drive yang gagal dimuat tidak boleh meninggalkan ikon
-              // gambar rusak di pojok panel.
-              team.logo_url
-                ? `<img class="roster-logo" src="${esc(team.logo_url)}" alt="" aria-hidden="true"
-                        loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()" />`
-                : ''
-            }
             ${
               /* Judul "Roster" dan hitungan pemainnya dibuang: kartu pemain
                  bernomor 1..n tepat di bawahnya sudah mengatakan keduanya.
