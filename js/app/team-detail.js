@@ -53,7 +53,7 @@ const styles = css`
   /* Logo tim sebagai watermark di balik SELURUH panel — HANYA saat logonya
      ada; lihat --logo-tim yang diset lewat inline style di bawah judul ini
      sama sekali tidak ditulis tanpa team.logo_url, jadi var() jatuh ke
-     `none` dan tidak ada gambar sama sekali.
+     'none' dan tidak ada gambar sama sekali.
      Dicoba lebih dulu sebagai <img> di belakang grid roster (z-index:-1
      pada .roster) — gagal: kartu roster punya latar OPAK (.roster li),
      jadi z-index negatif menaruhnya di belakang kartu itu sendiri dan nyaris
