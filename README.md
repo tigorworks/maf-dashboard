@@ -78,9 +78,11 @@ Halaman ini memakai ES module, jadi ia harus dibuka lewat HTTP — membukanya
 langsung sebagai berkas (`file://`) akan diblokir peramban.
 
 ```bash
-python3 -m http.server 3456
+python3 startweb.py
 # lalu buka http://localhost:3456/
 ```
+
+Atau, tanpa skrip itu: `python3 -m http.server 3456`.
 
 ## Catatan teknis singkat
 

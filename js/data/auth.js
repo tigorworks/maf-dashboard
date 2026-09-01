@@ -297,10 +297,10 @@ export async function pulihkanSesi() {
  * Permintaan yang membutuhkan sesi. Menyisipkan token, memperpanjang idle saat
  * berhasil, dan menutup sesi lokal begitu server bilang sesinya sudah mati.
  */
-export async function kirimTerautentikasi(body) {
+export async function kirimTerautentikasi(body, opsi = {}) {
   if (!sesi) throw new Error('Belum masuk.');
   try {
-    const hasil = await kirim({ ...body, token: sesi.token });
+    const hasil = await kirim({ ...body, token: sesi.token }, opsi);
     segarkan();
     return hasil;
   } catch (error) {
@@ -440,11 +440,39 @@ export async function ambilJejak({ teamId = '', batas = 0 } = {}) {
   return { jejak: hasil.jejak || [], total: Number(hasil.total || 0) };
 }
 
+/**
+ * Batas waktu untuk permintaan yang menyentuh BANYAK berkas Drive sekaligus.
+ *
+ * Menghapus tim membuang logo, foto tim, serta ID card dan foto tiap pemain —
+ * belasan berkas, dan tiap perintah ke Drive punya biayanya sendiri. Dengan
+ * batas 25 detik yang berlaku umum, tim beranggota tujuh berakhir sebagai
+ * "Server tidak merespons" padahal penghapusannya justru sedang berjalan: yang
+ * putus adalah penantian di browser, bukan pekerjaannya di server. Itu bentuk
+ * kegagalan yang paling menyesatkan — pengguna menekan ulang, dan yang
+ * dilaporkan kemudian adalah "Tim tidak ditemukan".
+ */
+const TIMEOUT_BERKAS_BANYAK = 90000;
+
 export async function hapusTim(teamId) {
-  return kirimTerautentikasi({ action: 'hapusTim', teamId });
+  return kirimTerautentikasi({ action: 'hapusTim', teamId },
+                             { timeout: TIMEOUT_BERKAS_BANYAK });
 }
 
-export async function simpanRoster(teamId, roster) {
-  const hasil = await kirimTerautentikasi({ action: 'saveRoster', teamId, roster });
-  return { roster: hasil.roster || [], jumlah: hasil.jumlah || 0 };
+/**
+ * Simpan roster satu tim, dan — kalau disertakan — nama timnya.
+ *
+ * `teamName` dikirim hanya kalau ada isinya. Mengirim string kosong akan
+ * ditolak GAS ("Nama tim tidak boleh kosong"), dan pemanggil yang memang tidak
+ * bermaksud mengubah nama tidak seharusnya berhadapan dengan galat itu.
+ */
+export async function simpanRoster(teamId, roster, teamName) {
+  const nama = String(teamName || '').trim();
+  const hasil = await kirimTerautentikasi({
+    action: 'saveRoster', teamId, roster, ...(nama ? { teamName: nama } : {}),
+  });
+  return {
+    roster: hasil.roster || [],
+    teamName: hasil.teamName || '',
+    jumlah: hasil.jumlah || 0,
+  };
 }
