@@ -1946,7 +1946,7 @@ const IKON_SIBUK = '<span class="putar" aria-hidden="true"></span>';
  * satu hanya menghasilkan kegagalan identik.
  *
  * "Server tidak merespons" ikut di sini bukan karena pasti menyeluruh, tapi
- * karena ongkosnya: tiap percobaan menunggu 25 detik sampai timeout, jadi
+ * karena ongkosnya: tiap percobaan menunggu 60 detik sampai timeout, jadi
  * tujuh berkas berarti hampir tiga menit menunggu untuk hasil yang hampir
  * pasti sama. Menghentikan lalu meminta tekan Simpan lagi jauh lebih murah.
  */
@@ -2138,8 +2138,13 @@ export class TeamDetail extends BaseElement {
               /* Nama tim disunting DI TEMPAT judulnya berada, bukan di baris
                  form tersendiri. Yang diubah adalah judul halaman ini; menaruh
                  kolomnya jauh dari situ memaksa orang membaca dua kali untuk
-                 yakin ia sedang mengubah nama yang benar. */
-              bolehUbah && this._sunting
+                 yakin ia sedang mengubah nama yang benar.
+                 HANYA ADMIN — bukan bolehUbah, yang juga true untuk PIC
+                 kontingen. Nama tim adalah identitas resmi pendaftaran, beda
+                 kelasnya dengan nickname atau ID game yang memang urusan
+                 sehari-hari PIC; GAS menolak diam-diam kalau tombol ini
+                 dinyalakan lewat DevTools. */
+              admin && this._sunting
                 ? `<input class="ubah-nama" type="text" name="teamName" maxlength="80"
                           aria-label="Nama tim"
                           value="${esc(this._namaTim ?? team.team_name)}" />`
@@ -3728,20 +3733,28 @@ export class TeamDetail extends BaseElement {
     const team = this._team;
     if (!team || !this._roster) return;
 
-    // Nama tim diperiksa LEBIH DULU: ia identitas barisnya, dan menolak setelah
-    // seluruh roster terkirim berarti orang menunggu sia-sia. Batas 80 karakter
-    // sama dengan yang ditegakkan GAS — kalau berbeda, salah satunya akan
-    // menolak sesuatu yang sudah diterima yang lain.
-    const namaTim = String(this._namaTim ?? team.team_name).trim();
-    if (!namaTim) {
-      this._pesan('Nama tim tidak boleh kosong.', 'galat');
-      this.$('.ubah-nama')?.focus();
-      return;
-    }
-    if (namaTim.length > 80) {
-      this._pesan('Nama tim terlalu panjang (maksimal 80 karakter).', 'galat');
-      this.$('.ubah-nama')?.focus();
-      return;
+    // Nama tim: HANYA ADMIN. `adalahAdmin()` dipanggil langsung, bukan memakai
+    // variabel `admin` dari render() — metode ini bukan bagian dari render, jadi
+    // variabel lokalnya tidak terlihat dari sini.
+    //
+    // Diperiksa lebih dulu karena ia identitas barisnya, dan menolak setelah
+    // seluruh roster terkirim berarti orang menunggu sia-sia. Untuk PIC
+    // kontingen, kolomnya tidak pernah dirender — this._namaTim tetap sama
+    // dengan nama tim yang sudah ada — jadi tidak pernah terkirim sebagai
+    // perubahan (lihat simpanRoster di bawah).
+    const bolehUbahNama = adalahAdmin();
+    const namaTim = String((this._namaTim ?? team.team_name)).trim();
+    if (bolehUbahNama) {
+      if (!namaTim) {
+        this._pesan('Nama tim tidak boleh kosong.', 'galat');
+        this.$('.ubah-nama')?.focus();
+        return;
+      }
+      if (namaTim.length > 80) {
+        this._pesan('Nama tim terlalu panjang (maksimal 80 karakter).', 'galat');
+        this.$('.ubah-nama')?.focus();
+        return;
+      }
     }
 
     const kosong = this._roster.find((r) => !r.name.trim());
@@ -3767,8 +3780,13 @@ export class TeamDetail extends BaseElement {
     // terbaca seperti gagal total.
     const adaBerkas = Object.keys(this._pilihan).length > 0;
     const berubah = this._rosterBerubah(roster);
+    // Nama berbeda dari yang tersimpan HARUS memicu jalur yang sama dengan
+    // roster berubah — kalau tidak, mengubah HANYA nama tim (tanpa menyentuh
+    // satu pun pemain atau berkas) berhenti di sini dengan "Tidak ada
+    // perubahan", padahal justru ada satu perubahan yang belum terkirim.
+    const namaBerubah = bolehUbahNama && namaTim !== team.team_name.trim();
 
-    if (!berubah && !adaBerkas) {
+    if (!berubah && !adaBerkas && !namaBerubah) {
       this._pesan('Tidak ada perubahan untuk disimpan.', 'galat');
       return;
     }
@@ -3780,12 +3798,13 @@ export class TeamDetail extends BaseElement {
     this._menyimpan = true;
     this.render();
 
-    if (!berubah) {
+    if (!berubah && !namaBerubah) {
       // Hanya berkas yang berubah: lewati permintaan roster sama sekali.
       // _menyimpan dibiarkan menyala — _simpanBerkas() yang akan mematikannya,
       // sehingga tidak ada kedipan "selesai" di antara kedua tahap.
       this._sunting = false;
       this._roster = null;
+      this._namaTim = null;
       this.render();
       await this._simpanBerkas();
       return;
@@ -3794,7 +3813,11 @@ export class TeamDetail extends BaseElement {
     this._pesan(`Menyimpan ${roster.length} pemain…`, 'sibuk');
 
     try {
-      const hasil = await simpanRoster(team.team_id, roster, namaTim);
+      // Dikirim hanya untuk admin. PIC kontingen tidak diberi wewenang ini;
+      // mengirim nama yang tidak berubah pun tidak masalah — GAS mengabaikannya
+      // untuk peran tim — tapi tidak mengirimnya sama sekali lebih jelas
+      // maksudnya saat membaca jejak permintaan.
+      const hasil = await simpanRoster(team.team_id, roster, bolehUbahNama ? namaTim : '');
 
       // Susun ulang anggota di store dari jawaban server: playerId pemain baru
       // ditentukan GAS, jadi kita tidak boleh menebaknya sendiri.

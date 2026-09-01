@@ -5,7 +5,7 @@
  */
 import { normalize, year } from '../core/format.js';
 
-const FETCH_TIMEOUT = 20000;
+const FETCH_TIMEOUT = 60000;
 
 /**
  * Endpoint Web App Google Apps Script (URL /exec dari Deploy > Web app).
@@ -47,7 +47,7 @@ export async function loadDataset(url) {
     if (payload && payload.ok === false) throw new Error(payload.error || 'Gagal memuat data.');
     return buildDataset(fromGas(payload), endpoint);
   } catch (error) {
-    if (error.name === 'AbortError') throw new Error('Waktu muat data habis (20 detik).');
+    if (error.name === 'AbortError') throw new Error('Waktu muat data habis (60 detik).');
     throw error;
   } finally {
     clearTimeout(timer);

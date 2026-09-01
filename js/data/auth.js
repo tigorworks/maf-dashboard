@@ -17,7 +17,7 @@ import { GAS_URL } from './source.js';
 
 const COOKIE = 'maf_sesi';
 const IDLE_MS = 3 * 60 * 60 * 1000; // samakan dengan CONFIG.SESI_IDLE_MS di Code.gs
-const TIMEOUT = 25000;
+const TIMEOUT = 60000;
 
 export const PERAN = { ADMIN: 'admin', RELAWAN: 'relawan', TIM: 'tim' };
 
@@ -284,7 +284,7 @@ export async function pulihkanSesi() {
   const token = bacaCookie();
   if (!token) return null;
   try {
-    const hasil = await kirim({ action: 'session', token }, { timeout: 12000 });
+    const hasil = await kirim({ action: 'session', token }, { timeout: 30000 });
     pasangSesi(hasil, token);
     return sesi;
   } catch (error) {
@@ -445,13 +445,13 @@ export async function ambilJejak({ teamId = '', batas = 0 } = {}) {
  *
  * Menghapus tim membuang logo, foto tim, serta ID card dan foto tiap pemain —
  * belasan berkas, dan tiap perintah ke Drive punya biayanya sendiri. Dengan
- * batas 25 detik yang berlaku umum, tim beranggota tujuh berakhir sebagai
+ * batas 60 detik yang berlaku umum, tim beranggota tujuh berakhir sebagai
  * "Server tidak merespons" padahal penghapusannya justru sedang berjalan: yang
  * putus adalah penantian di browser, bukan pekerjaannya di server. Itu bentuk
  * kegagalan yang paling menyesatkan — pengguna menekan ulang, dan yang
  * dilaporkan kemudian adalah "Tim tidak ditemukan".
  */
-const TIMEOUT_BERKAS_BANYAK = 90000;
+const TIMEOUT_BERKAS_BANYAK = 120000;
 
 export async function hapusTim(teamId) {
   return kirimTerautentikasi({ action: 'hapusTim', teamId },
