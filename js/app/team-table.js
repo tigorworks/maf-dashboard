@@ -14,7 +14,8 @@ import {
   buangTim, COLUMNS, LEBAR_AKSI, matchedMembers, selectTeam, setSort, store,
 } from '../data/app-state.js';
 import {
-  adalahAdmin, bolehUnggahTim, buatKodeTim, hapusTim, JENIS_KODE, namaJenis, UMUR_KODE,
+  adalahAdmin, ambilKontak, bolehUnggahTim, buatKodeTim, hapusTim, JENIS_KODE, namaJenis,
+  UMUR_KODE,
 } from '../data/auth.js';
 import { periksaTim } from '../data/rules.js';
 import '../ui/ui-pagination.js';
@@ -591,6 +592,61 @@ const styles = css`
     font-weight: 600;
     color: var(--peringatan);
   }
+  /* Kontak PIC kontingen: baris ringkas tepat di bawah judul, SEBELUM admin
+     memilih wewenang atau membaca kodenya — inilah satu-satunya bagian dialog
+     yang isinya perlu disalin ke aplikasi lain untuk membagikan kodenya.
+     Diberi latar tipis supaya berdiri sebagai satu unit dari paragraf
+     penjelasan di sekitarnya. Pemilihnya memakai tipe (p.kontak-pic) dengan
+     alasan yang sama seperti kode-besar dan lapis-galat di atas: aturan
+     "kotak p" kalau tidak, kekhususannya menang dan gaya di sini diabaikan. */
+  .kotak p.kontak-pic {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-2);
+    margin: 0 0 var(--sp-3);
+    padding: var(--sp-2) var(--sp-3);
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
+    background: var(--surface-2);
+    border-radius: var(--r-sm);
+  }
+  .kotak p.kontak-pic.muat,
+  .kotak p.kontak-pic.kosong {
+    color: var(--text-faint);
+    font-style: italic;
+  }
+  .kontak-pic b {
+    color: var(--text);
+  }
+  /* Ditekan untuk MENYALIN, bukan membuka WhatsApp: admin menghubungi lewat
+     aplikasi yang dipilihnya sendiri, dan menyalin selalu berhasil sementara
+     tautan wa.me bergantung pada bentuk nomor yang ditebak benar. */
+  .kontak-pic .hp {
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    color: var(--text);
+    background: var(--surface-inset);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    padding: 2px 8px;
+  }
+  .kontak-pic .hp:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .kontak-pic .hp.selesai {
+    color: #45c47a;
+    border-color: #45c47a;
+  }
+  .kontak-pic .hp.mati {
+    padding: 0;
+    color: var(--text-faint);
+    font-style: italic;
+    background: none;
+    border: 0;
+  }
 
   /* Di mode kartu TIDAK ada pemilih urutan.
      Dulu ada toolbar "Urutkan" berisi dropdown + tombol arah, karena header
@@ -730,6 +786,93 @@ export class TeamTable extends BaseElement {
     this._menuTeam = null;
     // { teamId, nama, sibuk, galat } saat konfirmasi hapus terbuka.
     this._hapus = null;
+    // Kontak PIC kontingen, untuk ditampilkan di dialog pembuatan kode.
+    // Map: kontingen dibakukan -> { pic, hp }. null = belum pernah diminta.
+    this._kontakKontingen = null;
+    this._kontakMemuat = false;
+    this._hpTersalin = ''; // nomor yang baru saja disalin dari dialog kode
+  }
+
+  /**
+   * Kontak PIC kontingen, untuk dialog pembuatan kode.
+   *
+   * Diambil SEKALI untuk seluruh peserta dan dicache, bukan sekali per dialog:
+   * dialognya sering dibuka berulang saat admin membagikan kode ke banyak
+   * kontingen berturut-turut, dan menembak ulang permintaan yang sama tiap kali
+   * hanya menambah jeda tanpa menambah informasi.
+   *
+   * Nomor HP tidak ada di payload publik (KOLOM_RAHASIA), jadi satu-satunya
+   * jalan mendapatkannya adalah permintaan ber-token ini — sama seperti yang
+   * dipakai layar notifikasi (audit-list.js).
+   */
+  async _muatKontakKontingen() {
+    if (this._kontakKontingen || this._kontakMemuat) return;
+    this._kontakMemuat = true;
+    this.render();
+    try {
+      const daftar = await ambilKontak();
+      const peta = new Map();
+      daftar.forEach((k) => {
+        const kunci = normalKontingen(k.kontingen);
+        if (!peta.has(kunci)) peta.set(kunci, { pic: '', hp: '' });
+        // Baris pertama yang MENGISINYA yang dipakai — sama seperti daftarKode
+        // di GAS — supaya satu tim yang mengosongkan kolom PIC tidak membuat
+        // seluruh kontingennya tampak tak bisa dihubungi.
+        const cur = peta.get(kunci);
+        if (!cur.pic) cur.pic = k.picKontingen?.nama || '';
+        if (!cur.hp) cur.hp = k.picKontingen?.hp || '';
+      });
+      this._kontakKontingen = peta;
+    } catch (error) {
+      // Gagal mengambil kontak tidak boleh mematikan dialog pembuatan kode —
+      // itu masih bisa berjalan tanpa nomor HP yang ditampilkan.
+      this._kontakKontingen = new Map();
+    }
+    this._kontakMemuat = false;
+    this.render();
+  }
+
+  /** Baris kontak PIC kontingen di dalam dialog kode. '' kalau belum diminta. */
+  _kontakBaris(kontingen) {
+    if (this._kontakMemuat && !this._kontakKontingen) {
+      return '<p class="kontak-pic muat">Mencari kontak PIC…</p>';
+    }
+    if (!this._kontakKontingen) return '';
+    const kontak = this._kontakKontingen.get(normalKontingen(kontingen));
+    if (!kontak || (!kontak.pic && !kontak.hp)) {
+      return '<p class="kontak-pic kosong">PIC kontingen tidak tercatat.</p>';
+    }
+    const tersalin = kontak.hp && this._hpTersalin === kontak.hp;
+    return `
+      <p class="kontak-pic">
+        PIC kontingen: <b>${esc(kontak.pic || '—')}</b>
+        ${
+          kontak.hp
+            ? `<button class="hp ${tersalin ? 'selesai' : ''}" type="button"
+                       data-hp-pic="${esc(kontak.hp)}" title="Salin nomor">
+                 ${tersalin ? 'Tersalin' : esc(kontak.hp)}
+               </button>`
+            : '<span class="hp mati">tanpa nomor</span>'
+        }
+      </p>`;
+  }
+
+  /** Salin nomor HP PIC kontingen dari dialog kode. */
+  async _salinHpPic(hp) {
+    if (!hp) return;
+    try {
+      await navigator.clipboard.writeText(hp);
+      this._hpTersalin = hp;
+      this.render();
+      clearTimeout(this._timerHpTersalin);
+      this._timerHpTersalin = setTimeout(() => {
+        this._hpTersalin = '';
+        this.requestRender();
+      }, 1600);
+    } catch (error) {
+      // Clipboard bisa ditolak (izin, konteks tidak aman). Nomornya tetap
+      // terbaca di layar dan bisa disalin manual.
+    }
   }
 
   /** Hasil derive() dari app-state. */
@@ -989,6 +1132,7 @@ export class TeamTable extends BaseElement {
       <div class="lapis" role="dialog" aria-modal="true" aria-label="Kode kontingen ${esc(k.nama)}">
         <div class="kotak">
           <h3>Kode kontingen ${esc(k.nama)}</h3>
+          ${this._kontakBaris(k.nama)}
           ${
             k.memilih
               ? `<p>${cakupan} Pilih wewenang yang diberikannya — ketiganya berlaku ${UMUR_KODE}.</p>
@@ -1110,6 +1254,11 @@ export class TeamTable extends BaseElement {
           this._salinKode();
           return;
         }
+        const hpPic = event.target.closest('[data-hp-pic]');
+        if (hpPic) {
+          this._salinHpPic(hpPic.dataset.hpPic);
+          return;
+        }
         // Selagi kodenya sedang dibuat, menutup dialog hanya menyembunyikan
         // permintaan yang tetap berjalan — dan hasilnya tidak pernah terbaca.
         if (this._kode.sibuk) return;
@@ -1163,6 +1312,7 @@ export class TeamTable extends BaseElement {
             this._kode = { nama: tim.kontingen, tim: cakupan, memilih: true,
                            jenis: '', sibuk: false, kode: '', sampai: 0, galat: '' };
             this.render();
+            this._muatKontakKontingen();
           }
           return;
         }

@@ -976,7 +976,42 @@ const styles = css`
 
   /* ================= lineup ================= */
   .roster {
+    position: relative;
+    /* Menahan logo watermark agar tidak pernah meluber keluar kotaknya sendiri
+       — logo yang diunggah PIC bisa berbentuk apa saja, tidak seperti aset MAF
+       yang dikurasi rapi. */
+    overflow: hidden;
     padding: var(--sp-5) var(--sp-6) var(--sp-6);
+  }
+  /* Logo tim sebagai watermark di balik roster — HANYA saat logonya ada; lihat
+     markup, <img>-nya sama sekali tidak dirender tanpa team.logo_url.
+     Kanan-bawah dipilih supaya tidak bersaing dengan nomor slot pertama yang
+     selalu duduk di kiri-atas grid (lihat .slot).
+     Grayscale + opasitas rendah menyeragamkan tampilannya: logo ini diunggah
+     PIC sendiri dalam bentuk dan warna apa pun, bukan aset yang dikurasi
+     seperti logo MAF — tanpa penyeragaman ini, logo yang kontras/terang akan
+     bersaing dengan teks kartu di depannya alih-alih diam di latar.
+     z-index -1 dari .roster yang position:relative, bukan urutan DOM: itu
+     menjaminnya tetap di belakang seluruh isi roster apa pun urutan
+     render-nya, tanpa perlu menandai tiap elemen lain dengan z-index sendiri. */
+  .roster-logo {
+    position: absolute;
+    right: var(--sp-4);
+    bottom: var(--sp-4);
+    z-index: -1;
+    width: min(200px, 32%);
+    height: min(200px, 32%);
+    object-fit: contain;
+    opacity: 0.08;
+    filter: grayscale(1);
+    pointer-events: none;
+    user-select: none;
+  }
+  @media (max-width: 720px) {
+    .roster-logo {
+      width: 110px;
+      height: 110px;
+    }
   }
   .roster-head {
     display: flex;
@@ -2179,6 +2214,16 @@ export class TeamDetail extends BaseElement {
           ${this._pitaPic(team, pic)}
 
           <section class="roster">
+            ${
+              // Watermark, bukan informasi — aria-hidden dan tanpa alt text.
+              // onerror="this.remove()" sama seperti crest di daftar tim:
+              // tautan Drive yang gagal dimuat tidak boleh meninggalkan ikon
+              // gambar rusak di pojok panel.
+              team.logo_url
+                ? `<img class="roster-logo" src="${esc(team.logo_url)}" alt="" aria-hidden="true"
+                        loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()" />`
+                : ''
+            }
             ${
               /* Judul "Roster" dan hitungan pemainnya dibuang: kartu pemain
                  bernomor 1..n tepat di bawahnya sudah mengatakan keduanya.
