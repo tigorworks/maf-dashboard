@@ -1130,13 +1130,16 @@ export class TeamTable extends BaseElement {
           this._jalankanHapus();
           return;
         }
-        if (event.target.closest('.kotak')) return;
-        // Klik di luar kotak = batal.
-        if (event.target.closest('.lapis')) {
-          this._hapus = null;
-          this.render();
-          return;
-        }
+        // Klik di latar TIDAK menutup dialog ini.
+        //
+        // Untuk dialog biasa, menutup lewat latar itu jalan keluar yang cepat.
+        // Di sini justru sebaliknya: dialognya memuat peringatan yang harus
+        // dibaca — tim yang dihapus tidak bisa didaftarkan ulang PIC — dan satu
+        // sentuhan meleset di layar sentuh membuangnya sebelum sempat terbaca.
+        // Lebih buruk lagi saat penghapusan sedang berjalan atau baru saja
+        // gagal: pesannya ikut hilang, dan yang tersisa cuma daftar tim tanpa
+        // penjelasan apa pun. Keluarnya lewat tombol Batal, yang jelas.
+        return;
       }
       // Menu dan tombolnya diperiksa lebih dulu: keduanya berada di dalam baris,
       // jadi tanpa ini klik pada menu akan ikut membuka panel detail.

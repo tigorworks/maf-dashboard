@@ -228,16 +228,26 @@ export function buangTim(teamId) {
 }
 
 /**
- * Ganti seluruh roster satu tim. Dipakai setelah admin menyimpan: pemain bisa
- * bertambah, berkurang, atau berubah urutan, sehingga menambal per pemain
- * (applyPlayerPatch) tidak cukup.
+ * Ganti seluruh roster satu tim, dan — kalau disertakan — nama timnya.
+ *
+ * Dipakai setelah menyimpan suntingan: pemain bisa bertambah, berkurang, atau
+ * berubah urutan, sehingga menambal per pemain (applyPlayerPatch) tidak cukup.
+ *
+ * Nama tim ikut di sini, bukan lewat aksi tersendiri, karena keduanya berubah
+ * dalam SATU penyimpanan. Dua aksi terpisah berarti store bisa sempat memuat
+ * nama baru dengan roster lama — keadaan yang tidak pernah ada di server.
+ *
+ * `teamName` kosong berarti "jangan sentuh", bukan "kosongkan": pemanggil yang
+ * hanya mengubah roster tidak boleh menghapus nama timnya.
  */
-export function gantiRoster(teamId, members) {
+export function gantiRoster(teamId, members, teamName) {
+  const nama = String(teamName || '').trim();
   store.set((state) => ({
     teams: state.teams.map((team) =>
       team.team_id === teamId
         ? {
             ...team,
+            ...(nama ? { team_name: nama } : {}),
             members,
             member_count: members.length,
             idcard_count: members.filter((m) => m.has_idcard).length,

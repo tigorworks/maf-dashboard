@@ -82,6 +82,51 @@ const styles = css`
     background: var(--surface-inset);
     border-radius: var(--r-xs);
   }
+
+  /* --- Layar gagal muat ---
+     Urutannya sengaja: ikon, apa yang terjadi, apa yang bisa dilakukan, lalu
+     rincian teknis paling bawah dengan ukuran terkecil. Rincian itu tetap ada
+     karena berguna saat melapor ke panitia, tapi ia jawaban untuk pertanyaan
+     ketiga — bukan yang pertama dibaca. */
+  .state.galat {
+    max-width: 560px;
+    margin: var(--sp-7) auto;
+    padding: var(--sp-7) var(--sp-5);
+  }
+  .state-ikon {
+    width: 44px;
+    height: 44px;
+    color: var(--peringatan);
+  }
+  .state.galat h2 {
+    color: var(--text);
+  }
+  .state-aksi {
+    margin-top: var(--sp-2);
+  }
+  .state-aksi button {
+    height: 42px;
+    padding: 0 var(--sp-5);
+    font-size: var(--fs-sm);
+    font-weight: 700;
+    color: var(--bg);
+    background: var(--accent);
+    border: 0;
+    border-radius: var(--r-sm);
+  }
+  .state-aksi button:hover:not(:disabled) {
+    filter: brightness(1.08);
+  }
+  .state-aksi button:disabled {
+    opacity: 0.6;
+    cursor: progress;
+  }
+  .state-rinci {
+    margin-top: var(--sp-2);
+    font-size: var(--fs-xs);
+    color: var(--text-faint);
+    overflow-wrap: anywhere;
+  }
   /* --- Layar memuat ---
      Rangka berkilau (shimmer) menjanjikan bentuk yang belum tentu datang, dan
      di jaringan lambat ia diam saja selama belasan detik: tidak ada yang
@@ -243,14 +288,7 @@ export class AppShell extends BaseElement {
     }
 
     if (state.phase === 'error') {
-      main.innerHTML = `
-        <div class="state">
-          <h2>Gagal memuat data</h2>
-          <p>${esc(state.error)}</p>
-          <p>Halaman ini memakai ES module, jadi harus dibuka lewat HTTP — bukan <code>file://</code>.
-             Jalankan <code>python3 -m http.server 3456</code> dari folder proyek lalu buka
-             <code>http://localhost:3456/</code>.</p>
-        </div>`;
+      main.innerHTML = this._layarGalat(state.error);
       return;
     }
 
@@ -365,6 +403,95 @@ export class AppShell extends BaseElement {
     }, 1000);
   }
 
+  /**
+   * Layar gagal muat.
+   *
+   * Yang dulu tampil di sini adalah pesan galat mentah ditambah petunjuk
+   * menjalankan python3 -m http.server — instruksi untuk pengembang di mesinnya
+   * sendiri, yang di halaman publik justru menyesatkan: sebabnya hampir selalu
+   * jaringan atau layanan Google yang lambat, bukan cara halaman ini dibuka.
+   * Pengunjung yang membacanya tidak punya "folder proyek" untuk dijalankan,
+   * dan panitia yang melihatnya menyimpulkan situsnya rusak.
+   *
+   * Susunannya sekarang mengikuti tiga hal yang ingin diketahui orang saat
+   * sesuatu gagal: APA yang terjadi, APA yang bisa dilakukan, dan — kalau perlu
+   * melapor — APA rinciannya. Petunjuk pengembang hanya muncul kalau halamannya
+   * memang sedang dibuka lewat file://.
+   */
+  _layarGalat(pesan) {
+    const teks = String(pesan || '');
+    const luring = typeof navigator !== 'undefined' && navigator.onLine === false;
+
+    // Kalimat sebab dipilih dari pesan teknisnya, bukan menggantikannya:
+    // rinciannya tetap tercetak di bawah untuk dilaporkan ke panitia.
+    var sebab;
+    if (luring) {
+      sebab = 'Perangkat ini sedang tidak terhubung ke internet. Periksa koneksi, lalu coba lagi.';
+    } else if (/waktu muat|tidak merespons|timeout/i.test(teks)) {
+      sebab =
+        'Server data belum menjawab pada waktunya. Ini biasanya sementara — ' +
+        'jaringan sedang lambat, atau layanan Google sedang sibuk.';
+    } else if (/dataset kosong/i.test(teks)) {
+      sebab =
+        'Server menjawab, tetapi belum ada satu tim pun yang terbaca. ' +
+        'Kemungkinan data pesertanya memang belum diunggah panitia.';
+    } else if (/HTTP\s*\d/i.test(teks)) {
+      sebab = 'Server data menolak permintaan ini. Kalau berulang, hubungi panitia.';
+    } else {
+      sebab = 'Data peserta tidak bisa diambil dari server. Coba lagi sebentar lagi.';
+    }
+
+    // Petunjuk pengembang HANYA saat berkasnya dibuka langsung, bukan lewat
+    // HTTP. Di GitHub Pages kondisi ini tidak pernah benar.
+    const lokal = typeof location !== 'undefined' && location.protocol === 'file:';
+
+    return `
+      <div class="state galat">
+        <svg class="state-ikon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6" />
+          <path d="M12 7.6v5.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+          <circle cx="12" cy="16.5" r="1.05" fill="currentColor" />
+        </svg>
+        <h2>Data peserta belum bisa ditampilkan</h2>
+        <p>${esc(sebab)}</p>
+        <div class="state-aksi">
+          <button type="button" data-act="muat-ulang" ${this._memuatUlang ? 'disabled' : ''}>
+            ${this._memuatUlang ? 'Memuat…' : 'Coba lagi'}
+          </button>
+        </div>
+        ${teks ? `<p class="state-rinci">Rincian: ${esc(teks)}</p>` : ''}
+        ${
+          lokal
+            ? `<p class="state-rinci">Halaman ini memakai ES module, jadi harus dibuka lewat HTTP —
+                 bukan <code>file://</code>. Jalankan <code>python3 -m http.server 3456</code>
+                 dari folder proyek lalu buka <code>http://localhost:3456/</code>.</p>`
+            : ''
+        }
+      </div>`;
+  }
+
+  /**
+   * Ambil dataset, dan laporkan kegagalannya ke store.
+   *
+   * Dipisah dari onMount supaya tombol "Coba lagi" bisa memanggilnya lagi tanpa
+   * memuat ulang seluruh halaman — memuat ulang berarti sesi dipulihkan dari
+   * cookie sekali lagi dan seluruh komponen dirakit ulang, padahal yang gagal
+   * cuma satu permintaan.
+   */
+  async _muatData(applyHash) {
+    this._memuatUlang = true;
+    if (store.state.phase === 'error') this.requestRender();
+    try {
+      const dataset = await loadDataset(this.dataset.src || '');
+      if (!dataset.teams.length) throw new Error('Dataset kosong — belum ada tim yang terbaca.');
+      setDataset(dataset);
+      if (applyHash) applyHash();
+    } catch (error) {
+      setError(error.message || String(error));
+    }
+    this._memuatUlang = false;
+  }
+
   async onMount() {
     this.track(store.subscribe(() => this.requestRender()));
     // Dipasang sebelum data dimuat supaya perubahan cabor apa pun tercermin di
@@ -406,14 +533,11 @@ export class AppShell extends BaseElement {
     // ke GAS, dan itu perjalanan jaringan tersendiri.
     pulihkanSesi();
 
-    try {
-      const dataset = await loadDataset(this.dataset.src || '');
-      if (!dataset.teams.length) throw new Error('Dataset kosong — belum ada tim yang terbaca.');
-      setDataset(dataset);
-      applyHash();
-    } catch (error) {
-      setError(error.message || String(error));
-    }
+    this.listen(this.shadowRoot, 'click', (event) => {
+      if (event.target.closest('[data-act="muat-ulang"]')) this._muatData(applyHash);
+    });
+
+    await this._muatData(applyHash);
   }
 
 }

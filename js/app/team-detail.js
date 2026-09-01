@@ -300,6 +300,27 @@ const styles = css`
     flex: 1;
     min-width: 0;
   }
+  /* Kolom nama tim menggantikan judul di tempat yang sama, dan meniru
+     bentuknya: ukuran dan tebal huruf yang sama, hanya diberi garis bawah dan
+     latar tipis supaya jelas ia bisa diketik. Kolom yang tampak berbeda dari
+     judul yang digantikannya membuat kepala halaman seakan bergeser saat mode
+     ubah dinyalakan. */
+  .ubah-nama {
+    width: 100%;
+    padding: 2px var(--sp-2);
+    font: inherit;
+    font-size: var(--fs-lg);
+    font-weight: 800;
+    letter-spacing: -0.015em;
+    color: var(--text);
+    background: var(--surface-inset);
+    border: 1px solid var(--border-strong, var(--border));
+    border-radius: var(--r-sm);
+    outline: 0;
+  }
+  .ubah-nama:focus {
+    border-color: var(--accent);
+  }
   h2 {
     margin: 0;
     font-size: var(--fs-lg);
@@ -2010,6 +2031,9 @@ export class TeamDetail extends BaseElement {
     // Salinan roster yang sedang disunting. Dipisah dari store supaya menambah
     // dan menghapus baris tidak menyentuh data asli sampai ditekan Simpan.
     this._roster = null;
+    // Nama tim yang sedang diketik. Dipisah dari _roster karena ia milik TIM,
+    // bukan salah satu pemainnya.
+    this._namaTim = null;
     this._lihat = null; // { playerId, nama, dataUrl, memuat, galat }
     this._mode = 'lihat'; // 'lihat' (verifikasi) | 'berkas' (logo & ID card) | 'foto'
     this._kodeTim = null; // { memuat } | { kode, sampai } | { galat } — khusus admin
@@ -2110,7 +2134,17 @@ export class TeamDetail extends BaseElement {
             }
           </div>
           <div class="head-body">
-            <h2>${esc(team.team_name)}</h2>
+            ${
+              /* Nama tim disunting DI TEMPAT judulnya berada, bukan di baris
+                 form tersendiri. Yang diubah adalah judul halaman ini; menaruh
+                 kolomnya jauh dari situ memaksa orang membaca dua kali untuk
+                 yakin ia sedang mengubah nama yang benar. */
+              bolehUbah && this._sunting
+                ? `<input class="ubah-nama" type="text" name="teamName" maxlength="80"
+                          aria-label="Nama tim"
+                          value="${esc(this._namaTim ?? team.team_name)}" />`
+                : `<h2>${esc(team.team_name)}</h2>`
+            }
             <p class="sub">${esc(team.kontingen || '')}${team.unit_kerja ? ` · ${esc(team.unit_kerja)}` : ''}${
       team.submission_date ? ` · Didaftarkan ${esc(formatDate(team.submission_date))}` : ''
     }</p>
@@ -3072,6 +3106,10 @@ export class TeamDetail extends BaseElement {
    */
   _mulaiSunting() {
     this._uid = 0;
+    // Nama tim ikut disunting. Disimpan terpisah dari _roster karena ia milik
+    // TIM, bukan salah satu pemainnya — dan render ulang tidak boleh
+    // mengembalikannya ke nama lama selagi orang masih mengetik.
+    this._namaTim = this._team?.team_name || '';
     this._roster = (this._team?.members || []).map((m) => ({
       uid: `u${++this._uid}`,
       playerId: m.player_id || '',
@@ -3091,6 +3129,11 @@ export class TeamDetail extends BaseElement {
   /** Simpan tiap ketikan ke _roster supaya render ulang tidak menghapusnya. */
   _catatKetikan(el) {
     if (!this._sunting || !el?.name) return;
+    // Nama tim tidak berada di dalam blok pemain mana pun.
+    if (el.name === 'teamName') {
+      this._namaTim = el.value;
+      return;
+    }
     const blok = el.closest?.('.sunting[data-uid]');
     if (!blok) return;
     const baris = this._roster.find((r) => r.uid === blok.dataset.uid);
@@ -3424,6 +3467,7 @@ export class TeamDetail extends BaseElement {
           // berganti berarti tombol "Ya, hapus" menghapus tim yang tidak lagi
           // terlihat di layar.
           this._hapus = null;
+          this._namaTim = null;
           this._riwayat = null;
           this._lepasPilihan();
         }
@@ -3465,8 +3509,11 @@ export class TeamDetail extends BaseElement {
         // Selagi penghapusan berjalan, menutup dialog hanya menyembunyikan
         // permintaan yang tetap jalan — dan hasilnya tidak pernah terbaca.
         if (this._hapus.sibuk) return;
-        // Klik di luar kotak = batal, sama dengan menekan Batal.
-        if (event.target.closest('[data-act="batal-hapus"]') || !event.target.closest('.kotak')) {
+        // HANYA tombol Batal yang menutup. Klik di latar sengaja diabaikan:
+        // dialog ini memuat peringatan yang harus dibaca, dan satu sentuhan
+        // meleset di layar sentuh membuangnya sebelum sempat terbaca — termasuk
+        // pesan galat yang baru saja muncul di dalamnya.
+        if (event.target.closest('[data-act="batal-hapus"]')) {
           this._hapus = null;
           this.render();
         }
@@ -3552,6 +3599,7 @@ export class TeamDetail extends BaseElement {
       if (event.target.closest('[data-act="batal-sunting"]')) {
         this._sunting = false;
         this._roster = null;
+        this._namaTim = null;
         this._pesan('');
         this.render();
         return;
@@ -3680,6 +3728,22 @@ export class TeamDetail extends BaseElement {
     const team = this._team;
     if (!team || !this._roster) return;
 
+    // Nama tim diperiksa LEBIH DULU: ia identitas barisnya, dan menolak setelah
+    // seluruh roster terkirim berarti orang menunggu sia-sia. Batas 80 karakter
+    // sama dengan yang ditegakkan GAS — kalau berbeda, salah satunya akan
+    // menolak sesuatu yang sudah diterima yang lain.
+    const namaTim = String(this._namaTim ?? team.team_name).trim();
+    if (!namaTim) {
+      this._pesan('Nama tim tidak boleh kosong.', 'galat');
+      this.$('.ubah-nama')?.focus();
+      return;
+    }
+    if (namaTim.length > 80) {
+      this._pesan('Nama tim terlalu panjang (maksimal 80 karakter).', 'galat');
+      this.$('.ubah-nama')?.focus();
+      return;
+    }
+
     const kosong = this._roster.find((r) => !r.name.trim());
     if (kosong) {
       this._pesan('Ada pemain tanpa nama. Isi atau hapus barisnya.', 'galat');
@@ -3730,7 +3794,7 @@ export class TeamDetail extends BaseElement {
     this._pesan(`Menyimpan ${roster.length} pemain…`, 'sibuk');
 
     try {
-      const hasil = await simpanRoster(team.team_id, roster);
+      const hasil = await simpanRoster(team.team_id, roster, namaTim);
 
       // Susun ulang anggota di store dari jawaban server: playerId pemain baru
       // ditentukan GAS, jadi kita tidak boleh menebaknya sendiri.
@@ -3748,10 +3812,14 @@ export class TeamDetail extends BaseElement {
           status: r.status,
         };
       });
-      gantiRoster(team.team_id, anggotaBaru);
+      // Nama yang dipakai adalah yang DIKEMBALIKAN server, bukan yang diketik:
+      // kalau GAS menolak perubahannya karena suatu sebab, layar harus
+      // menampilkan nama yang benar-benar tersimpan.
+      gantiRoster(team.team_id, anggotaBaru, hasil.teamName || namaTim);
 
       this._sunting = false;
       this._roster = null;
+      this._namaTim = null;
       if (!adaBerkas) this._menyimpan = false;
       this.render();
 
