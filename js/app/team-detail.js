@@ -20,7 +20,7 @@ import { GAME_META } from '../data/source.js';
 import {
   applyPlayerPatch, applyUpload, buangTim, caborTerkunci, gantiRoster, selectTeam, store,
 } from '../data/app-state.js';
-import { ACCEPTED_TYPES, uploadTeamFile } from '../data/upload.js';
+import { PICKER_TYPES, uploadTeamFile } from '../data/upload.js';
 import {
   adalahAdmin, adalahTim, ambilIdCard, ambilKodeTim, bolehLihatIdCard,
   ambilJejak, bolehHapusTim, bolehSuntingTim, bolehUnggahTim, buatKodeTim, hapusTim,
@@ -2390,7 +2390,7 @@ export class TeamDetail extends BaseElement {
                       .join('')
               }
             </ol>
-            ${bolehUbah && this._sunting ? `<input type="file" id="berkas" accept="${ACCEPTED_TYPES.join(',')}" hidden />` : ''}
+            ${bolehUbah && this._sunting ? `<input type="file" id="berkas" accept="${PICKER_TYPES.join(',')}" hidden />` : ''}
             ${
               /* Menambah pemain HANYA untuk admin. PIC hanya membetulkan yang
                  sudah ada: susunan peserta ditetapkan lewat pendaftaran resmi,
@@ -2592,7 +2592,7 @@ export class TeamDetail extends BaseElement {
         </ul>
 
         ${this._bilahBerkas()}
-        <input type="file" id="berkas" accept="${ACCEPTED_TYPES.join(',')}" hidden />
+        <input type="file" id="berkas" accept="${PICKER_TYPES.join(',')}" hidden />
       </section>`;
   }
 
@@ -2742,7 +2742,7 @@ export class TeamDetail extends BaseElement {
         </ul>
 
         ${this._bilahBerkas()}
-        <input type="file" id="berkas" accept="${ACCEPTED_TYPES.join(',')}" hidden />
+        <input type="file" id="berkas" accept="${PICKER_TYPES.join(',')}" hidden />
       </section>`;
   }
 
