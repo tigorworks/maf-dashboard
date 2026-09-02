@@ -41,7 +41,6 @@ const styles = css`
   }
 
   .panel {
-    position: relative;
     display: flex;
     flex-direction: column;
     width: 100%;
@@ -50,37 +49,10 @@ const styles = css`
        terlempar ke dua ujung layar. */
     --tepi: max(var(--sp-6), calc((100% - var(--maxw)) / 2));
   }
-  /* Logo tim sebagai watermark di balik SELURUH panel — HANYA saat logonya
-     ada; lihat --logo-tim yang diset lewat inline style di bawah judul ini
-     sama sekali tidak ditulis tanpa team.logo_url, jadi var() jatuh ke
-     'none' dan tidak ada gambar sama sekali.
-     Dicoba lebih dulu sebagai <img> di belakang grid roster (z-index:-1
-     pada .roster) — gagal: kartu roster punya latar OPAK (.roster li),
-     jadi z-index negatif menaruhnya di belakang kartu itu sendiri dan nyaris
-     seluruhnya tertutup. Dipindah ke sini persis meniru pola yang sudah
-     terbukti jalan di team-table.js: dilukis di permukaan PANEL (bukan di
-     belakang kartu), lalu isi panel (header + .body) dinaikkan z-index:1
-     supaya watermark tetap di paling belakang tanpa terhalang. */
-  .panel::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    pointer-events: none;
-    background-image: var(--logo-tim, none);
-    background-repeat: no-repeat;
-    background-position: right bottom;
-    background-size: auto min(280px, 42%);
-    opacity: 0.07;
-    filter: grayscale(1);
-  }
-  /* header punya position/z-index sendiri (sticky, z-index:10) — sudah di
-     atas watermark tanpa disentuh. Hanya .body yang perlu dinaikkan. */
-  .panel > .body {
-    position: relative;
-    z-index: 1;
-  }
-  header,
+  /* Diikat ke .panel karena alasan yang sama dengan .panel > header di bawah:
+     --tepi adalah lebar baca panel tim, dan penampil ID card bukan bagian
+     dari panel itu. */
+  .panel > header,
   .pj,
   .roster,
   .berkas {
@@ -88,26 +60,47 @@ const styles = css`
     padding-right: var(--tepi);
   }
 
+  /* Tombol kembali sengaja TIDAK berupa pil bergaris lagi.
+     Sejak crest ber-logo membesar, kepala halaman dipimpin identitas tim —
+     dan pil dengan latar + border berdiri di sebelahnya sebagai benda kedua
+     yang berebut perhatian dengan logonya. Ia navigasi, bukan identitas:
+     tugasnya cukup ditemukan saat dicari, bukan dilihat lebih dulu.
+     Bentuknya jadi hening (tanpa latar, tanpa garis) dan permukaannya baru
+     muncul saat disentuh kursor. Labelnya TETAP ada — berbeda dari sekadar
+     ikon chevron: yang memakai layar ini PIC kontingen dan panitia, bukan
+     orang yang hafal konvensi aplikasi. Di ponsel labelnya memang dilepas,
+     tapi di sana ruangnya yang memaksa, bukan pilihan gaya. */
   .kembali {
     display: inline-flex;
     align-items: center;
-    gap: var(--sp-2);
-    padding: 8px var(--sp-4) 8px var(--sp-3);
-    font-size: var(--fs-sm);
-    font-weight: 700;
+    justify-content: center;
+    /* Tidak boleh menyusut — nama tim (.head-body) yang memakan sisa ruang. */
+    flex: none;
+    /* 12px + ikon 16px = sasaran sentuh 40px. Ini kini SATU-SATUNYA jalan
+       kembali di dalam layar (Esc tidak ada di ponsel), jadi ia tidak boleh
+       jadi sasaran yang meleset. */
+    padding: 12px;
+    /* Ditarik balik selebar padding-nya sendiri supaya silangnya lurus dengan
+       tepi KANAN kepala halaman. Tanpa border yang dulu menandai batasnya,
+       padding terbaca sebagai kepala halaman yang menjorok.
+       Yang menyentuh tepi layar hanyalah KOTAK tombolnya — dan kotak itu tak
+       terlihat sampai disentuh kursor. Ikonnya sendiri tetap masuk ke dalam
+       selebar padding-nya, jadi ia justru jatuh persis di garis tepi yang
+       sama dengan isi kepala halaman lainnya. */
+    margin-right: -12px;
     color: var(--text-muted);
-    background: var(--surface-2);
-    border: 1px solid var(--border);
+    background: none;
+    border: 0;
     border-radius: var(--r-pill);
-    transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+    transition: color var(--dur) var(--ease), background-color var(--dur) var(--ease);
   }
   .kembali:hover {
     color: var(--text);
-    border-color: var(--border-strong);
+    background: var(--surface-2);
   }
   .kembali svg {
-    width: 15px;
-    height: 15px;
+    width: 16px;
+    height: 16px;
   }
 
   /* ================= kepala: identitas tim ================= */
@@ -115,7 +108,15 @@ const styles = css`
      ini dua band terpisah dengan judul sebesar 3xl — sendirian sudah memakan
      seperempat layar, padahal halaman penuh justru dibuat agar isinya muat
      tanpa menggulir. */
-  header {
+  /* .panel > header, BUKAN header polos.
+     Di berkas ini ada DUA <header>: kepala panel tim, dan kepala penampil ID
+     card (.lihat-idcard). Ditulis sebagai selektor elemen polos, aturan yang
+     hanya dimaksudkan untuk kepala panel ikut mengenai penampil — dan
+     "top: var(--header-h)" di bawah ini menekan pita ber-tombol-× itu turun
+     sejauh tinggi header aplikasi, padahal penampilnya sendiri position:fixed
+     menutup layar dari piksel paling atas. Diikat ke anaknya .panel supaya
+     <header> mana pun yang lahir di kemudian hari tidak ikut terseret. */
+  .panel > header {
     position: sticky;
     top: var(--header-h);
     z-index: 10;
@@ -327,6 +328,61 @@ const styles = css`
     border-radius: var(--r-md);
     box-shadow: var(--shadow-md);
   }
+  /* Tim yang SUDAH punya logo diperlakukan berbeda dari yang masih monogram.
+     Monogram butuh gradien berwarna itu — dari situlah seluruh identitasnya
+     datang. Logo sungguhan justru dirugikan olehnya: logo esport hampir selalu
+     sudah membawa latar dan bentuknya sendiri (perisai, lingkaran), sehingga
+     gradien di belakangnya terbaca sebagai halo warna yang berebut perhatian
+     dengan karyanya. Diganti permukaan netral + cincin tipis ber-hue tim:
+     warna identitasnya tetap ada, tapi sebagai bingkai, bukan sebagai latar
+     yang menempel di belakang logo.
+     Ukurannya juga dinaikkan (44 -> 60 px). Pada 44 px logo serumit ini —
+     maskot bergaris halus dengan teks kecil — hancur jadi bercak; ia satu-
+     satunya elemen di halaman yang benar-benar milik tim itu, jadi diberi
+     ruang untuk terbaca. */
+  .crest.ada-logo {
+    width: 100px;
+    height: 100px;
+    padding: 0;
+    /* MENEMBUS garis bawah header. Yang dipangkas margin negatif ini hanya
+       tinggi TATA LETAKNYA (100 - 26 = 74 px), bukan tinggi gambarnya: header
+       menghitung tingginya seolah crest cuma 74 px, lalu logonya tetap
+       dilukis 100 px penuh dan 26 px sisanya jatuh melewati garis.
+       Dipilih margin negatif, bukan position:absolute, supaya crest tetap
+       ikut aliran flex header — tombol Kembali dan nama tim tetap terdorong
+       ke tempat yang benar dengan sendirinya, apa pun panjang namanya. */
+    margin-bottom: -26px;
+    /* Bagian yang menjulur menggantung di atas konten yang bergulir di
+       bawahnya (header ini sticky). Ia dekoratif — jangan sampai ia
+       menelan klik yang sebenarnya ditujukan ke konten di baliknya. */
+    pointer-events: none;
+    /* TANPA kotak: tidak ada isian permukaan, tidak ada cincin, tidak ada
+       box-shadow. Percobaan sebelumnya memberi logo sebuah "piring"
+       bersudut membulat dengan cincin tipis — hasilnya terbaca sebagai
+       thumbnail berkas, bukan lambang tim: bingkai persegi itu bersaing
+       dengan siluet logonya sendiri (logo esport hampir selalu sudah
+       berbentuk perisai, elang, atau lingkaran). Dua bentuk bertumpuk,
+       dan yang menang justru bentuk yang bukan milik tim.
+       Gantinya cuma cahaya: radial-gradient ber-hue tim tanpa tepi keras.
+       Ia memberi kedalaman dan tetap membawa warna identitas, tapi tidak
+       menggambar batas apa pun yang bisa bersaing dengan logonya. */
+    background: radial-gradient(
+      circle at 50% 45%,
+      hsl(var(--hue) 62% 55% / 0.24),
+      transparent 68%
+    );
+    box-shadow: none;
+  }
+  /* drop-shadow, BUKAN box-shadow — bedanya menentukan di sini.
+     box-shadow selalu mengikuti KOTAK elemen; drop-shadow mengikuti kanal
+     alpha gambarnya, jadi pada logo PNG transparan bayangannya jatuh
+     mengikuti lekuk perisainya sendiri dan logo itu benar-benar terangkat
+     dari halaman. Pada logo yang latarnya solid ia jatuh kembali jadi
+     bayangan lembut biasa di tepi gambar — jadi aman untuk keduanya, dan
+     PIC mengunggah keduanya. */
+  .crest.ada-logo img {
+    filter: drop-shadow(0 3px 7px rgb(0 0 0 / 0.55));
+  }
   .head-body {
     flex: 1;
     min-width: 0;
@@ -400,6 +456,15 @@ const styles = css`
     color: var(--peringatan);
     background: color-mix(in srgb, var(--peringatan) 10%, transparent);
     border-bottom: 1px solid color-mix(in srgb, var(--peringatan) 26%, transparent);
+  }
+  /* Ruang untuk bagian crest yang menjulur.
+     Yang ditambah padding ATAS, bukan padding kiri. Padding kiri harus
+     ditebak dari lebar tombol "Kembali" + jarak flex — angka yang berubah
+     sendiri kalau teks tombolnya berubah, dan meleset sedikit saja berarti
+     logo menutupi tulisan status. Padding atas tidak menebak apa pun: berapa
+     pun lebar tombolnya, teksnya selalu turun ke bawah julurannya. */
+  .panel.ada-logo .aturan {
+    padding-top: calc(var(--sp-3) + 20px);
   }
   .aturan svg {
     flex: none;
@@ -641,11 +706,15 @@ const styles = css`
     color: var(--text-faint);
   }
 
-  /* Logo menggantikan monogram begitu tim mengunggahnya. */
+  /* Logo menggantikan monogram begitu tim mengunggahnya.
+     contain, BUKAN cover: logo diunggah PIC dalam rasio apa pun, dan cover
+     memotong sisi yang lebih panjang — pada logo perisai/melebar yang
+     terpotong justru bagian yang membuatnya dikenali. Lebih baik ada ruang
+     kosong di sisinya daripada mahkota atau kaki perisainya hilang. */
   .crest img {
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain;
     border-radius: inherit;
   }
 
@@ -1745,15 +1814,63 @@ const styles = css`
     font-weight: 600;
     color: var(--text-faint);
   }
+  /* Kotak ini harus BENAR-BENAR terbatas setinggi sisa layar — foto ID card
+     dari kamera ponsel jauh lebih tinggi dari layar mana pun.
+     Butuh DUA hal, dan keduanya wajib:
+
+     1. min-height: 0 — sebagai item grid di baris '1fr' milik .lihat-idcard,
+        min-height bawaannya 'auto', artinya ia menolak menyusut di bawah
+        tinggi isinya.
+
+     2. grid-template-rows/columns: minmax(0, 1fr) — ini yang sebelumnya
+        terlewat. .isi SENDIRI sebuah grid, dan tanpa track eksplisit ia
+        memakai baris implisit 'auto' yang ikut membesar mengikuti fotonya.
+        Akibatnya area grid si gambar berukuran-isi, tingginya jadi TAK
+        TENTU, dan 'max-height: 100%' pada gambar tidak punya apa pun untuk
+        dijadikan acuan — spesifikasi menyuruh peramban mengabaikannya, jadi
+        gambar terlukis seukuran aslinya lalu meluber ke bawah layar.
+        minmax(0, 1fr) membuat sel itu tertentu dan tidak bisa melar, sehingga
+        persentase pada gambarnya akhirnya berarti sesuatu.
+
+     place-items: center dipertahankan: ia juga yang memusatkan pesan
+     "Mengambil berkas…" dan pesan galat, bukan hanya gambarnya. */
   .lihat-idcard .isi {
+    position: relative;
     display: grid;
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     place-items: center;
+    min-height: 0;
     padding: var(--sp-4);
-    overflow: auto;
+    /* hidden, bukan auto: gambarnya kini dijamin muat, jadi tidak ada yang
+       perlu digulir. auto justru berbahaya di kotak yang isinya dipusatkan —
+       kalau sesuatu meluber, luberannya terbagi ke ATAS dan bawah, dan bagian
+       atas tidak bisa dicapai dengan menggulir. */
+    overflow: hidden;
+  }
+  /* Penanda "Menajamkan…" mengambang di sudut, bukan di aliran isi: ditaruh
+     di aliran, ia menggeser gambarnya sesaat lalu menggesernya balik saat
+     versi tajam tiba — gerakan yang tidak ada gunanya. */
+  .lihat-idcard .menajam {
+    position: absolute;
+    right: var(--sp-4);
+    bottom: var(--sp-4);
+    padding: 4px 10px;
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+    background: color-mix(in srgb, var(--surface-2) 88%, transparent);
+    border: 1px solid var(--border);
+    border-radius: var(--r-pill);
+    pointer-events: none;
   }
   .lihat-idcard img {
     max-width: 100%;
     max-height: 100%;
+    /* Jaring pengaman: seandainya suatu saat ada yang memberi gambar ini
+       lebar atau tinggi pasti, contain menjaganya tetap utuh dan berimbang
+       alih-alih gepeng — pada ID card, rasio yang melenceng bukan sekadar
+       jelek, ia mengubah wajah orang. */
+    object-fit: contain;
     border-radius: var(--r-sm);
   }
   .lihat-idcard .info {
@@ -1772,7 +1889,8 @@ const styles = css`
        penanda mode, dan chip cabor dilepas — cabor sudah tampil di header
        aplikasi tepat di atasnya, jadi mengulangnya di sini hanya mendorong
        isinya keluar layar. */
-    .kembali span,
+    /* .kembali tidak ikut di sini lagi: ia sudah tombol silang tanpa label
+       di semua ukuran layar, jadi tidak ada apa pun yang perlu dilepas. */
     .mode-tag,
     .game-tag,
     .ubah span {
@@ -1790,9 +1908,6 @@ const styles = css`
     .bilah-simpan button {
       flex: 1;
     }
-    .kembali {
-      padding: 8px;
-    }
     .head-body {
       min-width: 0;
     }
@@ -1805,7 +1920,7 @@ const styles = css`
     }
     /* Grid, bukan flex-wrap: tanpa ini nama tim terjepit jadi 3 baris karena
        badge cabor dan tombol tutup ikut berebut baris yang sama. */
-    header {
+    .panel > header {
       gap: var(--sp-2);
       padding: var(--sp-2) var(--sp-3);
     }
@@ -1813,6 +1928,20 @@ const styles = css`
       width: 36px;
       height: 36px;
       font-size: 12px;
+    }
+    /* Tetap lebih besar dari monogram, tapi tidak sebesar di desktop: di
+       kepala halaman ponsel ia berbagi satu baris sempit dengan tombol
+       Kembali dan nama tim. */
+    .crest.ada-logo {
+      width: 68px;
+      height: 68px;
+      padding: 0;
+      /* Julurannya ikut mengecil: di layar sempit, 26 px menutupi terlalu
+         besar bagian pita status yang tulisannya sendiri sudah berdesakan. */
+      margin-bottom: -16px;
+    }
+    .panel.ada-logo .aturan {
+      padding-top: calc(var(--sp-3) + 12px);
     }
     .game-tag {
       font-size: var(--fs-xs);
@@ -2145,22 +2274,41 @@ export class TeamDetail extends BaseElement {
     // simpan di mode ubah, supaya satu tombol Simpan mengurus keduanya.
     const antreBerkas = Object.keys(this._pilihan).length;
 
+    // Logo crest yang SUDAH termuat diselamatkan sebelum innerHTML ditimpa —
+    // lihat _rawatCrest() di bawah untuk alasannya.
+    const crestLama = this.shadowRoot.querySelector('.crest img');
+
     this.shadowRoot.innerHTML = `
-      <section class="panel ${unggah || foto ? 'mode-unggah' : 'mode-lihat'}${this._menyimpan ? ' menyimpan' : ''}"
+      <section class="panel ${unggah || foto ? 'mode-unggah' : 'mode-lihat'}${this._menyimpan ? ' menyimpan' : ''}${
+      /* Penanda untuk CSS: crest ber-logo menjulur melewati garis header,
+         dan pita aturan tepat di bawahnya harus diberi ruang. Kelasnya
+         dipasang di .panel — bukan di .crest — karena yang perlu tahu
+         justru elemen di LUAR header, dan CSS tidak bisa memilih ke atas. */
+      team.logo_url ? ' ada-logo' : ''
+    }"
                aria-label="${unggah ? 'Unggah berkas' : foto ? 'Unggah foto' : 'Detail'} tim ${esc(team.team_name)}"
-               style="--tone:${game.color}${team.logo_url ? `;--logo-tim:url('${esc(team.logo_url)}')` : ''}">
+               style="--tone:${game.color}">
         <header>
-          <button class="kembali" type="button" data-act="kembali" aria-label="Kembali ke daftar tim">
-            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path d="M10 3 5 8l5 5" stroke="currentColor" stroke-width="1.8"
-                    stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-            <span>Kembali</span>
-          </button>
-          <div class="crest" style="--hue:${hueOf(team.team_name)}" aria-hidden="true">
+          ${/* Crest PALING KIRI — kepala halaman dipimpin identitas tim, bukan
+               kontrol navigasi. Tombol kembali ada di ujung kanan (di bawah).
+               Urutan DOM sengaja dibuat sama dengan urutan yang terlihat:
+               memindahkannya lewat CSS (order/row-reverse) akan membuat urutan
+               Tab melompat ke tempat yang tidak sesuai dengan yang dilihat. */ ''}
+          <div class="crest${team.logo_url ? ' ada-logo' : ''}"
+               style="--hue:${hueOf(team.team_name)}" aria-hidden="true">
             ${
+              /* TANPA loading="lazy" — beda dengan crest di daftar tim.
+                 Di sana ada puluhan baris dan sebagian besar di luar layar;
+                 di sini logonya cuma satu dan SELALU terlihat, jadi lazy
+                 tidak menghemat apa pun. Yang dilakukannya justru merugikan:
+                 render() menulis ulang seluruh innerHTML, jadi tiap kali
+                 kode tim dibuka/disalin <img> ini lahir sebagai elemen baru,
+                 dan elemen lazy yang baru lahir menunda muatnya sampai
+                 IntersectionObserver berjalan — satu frame kosong tiap klik.
+                 Itulah kedipnya. Node-nya sendiri kini juga dipertahankan
+                 lintas render, lihat _rawatCrest(). */
               team.logo_url
-                ? `<img src="${esc(team.logo_url)}" alt="" loading="lazy" referrerpolicy="no-referrer" />`
+                ? `<img src="${esc(team.logo_url)}" alt="" decoding="sync" referrerpolicy="no-referrer" />`
                 : esc(initials(team.team_name))
             }
           </div>
@@ -2197,6 +2345,17 @@ export class TeamDetail extends BaseElement {
                    </button>`
               : `<span class="mode-tag">${unggah ? 'Unggah berkas' : foto ? 'Unggah foto' : 'Verifikasi'}</span>`
           }
+          ${/* Tombol tutup, bukan lagi "‹ Kembali" berlabel. Tanpa label
+               terlihat, keterangannya harus datang dari dua tempat sekaligus:
+               title (tooltip untuk yang memakai tetikus) dan aria-label (untuk
+               pembaca layar). Keduanya menyebut TUJUANNYA — "kembali ke daftar
+               tim" — bukan sekadar "tutup", karena yang perlu diketahui orang
+               adalah ke mana ia dibawa, bukan bahwa sesuatu menghilang. */ ''}
+          <button class="kembali" type="button" data-act="kembali"
+                  title="Tutup — kembali ke daftar tim"
+                  aria-label="Tutup, kembali ke daftar tim">
+            ${IKON_SILANG}
+          </button>
         </header>
 
         <div class="body">
@@ -2287,9 +2446,39 @@ export class TeamDetail extends BaseElement {
         ${this._lihat ? this._penampilIdCard() : ''}
       </section>`;
 
+    this._rawatCrest(crestLama);
+
     // Pratinjau ID card baru diminta setelah markup ada, dan hanya di mode
     // lihat: mode unggah tidak menampilkan gambarnya sama sekali.
     if (!unggah && !foto && bolehIdCard) this._muatPratinjau(members);
+  }
+
+  /**
+   * Pakai kembali elemen <img> logo yang lama, bukan yang baru saja ditulis.
+   *
+   * render() di komponen ini menimpa SELURUH innerHTML. Untuk teks itu tidak
+   * apa-apa, tapi untuk gambar berarti tiap render melahirkan <img> baru: ia
+   * mulai dari nol, dan ada jeda satu-dua frame sebelum piksel lamanya kembali
+   * terlukis walau berkasnya sudah ada di cache peramban. Di layar ini render
+   * dipanggil untuk hal-hal yang sama sekali tidak menyangkut logo — membuka
+   * kode tim, menyalinnya, tanda "tersalin" yang padam sendiri setelah 1,6
+   * detik — sehingga yang terlihat orang adalah logo berkedip tiap kali ia
+   * menekan tombol yang tidak ada hubungannya.
+   *
+   * Node lama dipindahkan ke tempat node baru: elemen yang sudah punya piksel
+   * tidak pernah kehilangan piksel itu, dan tidak ada permintaan jaringan baru.
+   * Kalau src-nya berubah (logo baru diunggah), node lama dibiarkan dibuang —
+   * di situ gambar memang HARUS berganti.
+   */
+  _rawatCrest(lama) {
+    if (!lama) return;
+    const baru = this.shadowRoot.querySelector('.crest img');
+    // Hanya kalau keduanya ada dan menunjuk gambar yang sama. Perbandingannya
+    // memakai properti .src (sudah diserap jadi URL absolut oleh peramban),
+    // bukan atributnya — supaya tidak pernah salah nilai gara-gara beda
+    // bentuk penulisan yang sebenarnya menunjuk berkas yang sama.
+    if (!baru || baru.src !== lama.src) return;
+    baru.replaceWith(lama);
   }
 
   /**
@@ -3011,6 +3200,13 @@ export class TeamDetail extends BaseElement {
                 ? `<span class="info">${esc(v.galat)}</span>`
                 : `<img src="${esc(v.dataUrl)}" alt="ID card ${esc(v.nama)}" />`
           }
+          ${
+            /* Dikatakan apa adanya selagi yang tampil masih versi kecil.
+               Tanpa ini, orang bisa menyimpulkan ID card-nya memang buram
+               lalu menolaknya — padahal yang buram cuma pratinjaunya, dan
+               versi tajamnya sedang dalam perjalanan. */
+            v.kasar ? '<span class="menajam">Menajamkan…</span>' : ''
+          }
         </div>
       </div>`;
   }
@@ -3725,24 +3921,74 @@ export class TeamDetail extends BaseElement {
     });
   }
 
-  /** Ambil dan tampilkan ID card satu pemain. Butuh sesi admin/relawan. */
+  /**
+   * Tampilkan ID card satu pemain. Butuh sesi admin/relawan.
+   *
+   * Gambar yang SUDAH ada di kartu pemain langsung dipakai sebagai isi
+   * penampil — tanpa tunggu, tanpa permintaan baru. Dulu klik ini selalu
+   * dimulai dari layar "Mengambil berkas…" walau gambarnya sebenarnya sudah
+   * ada di layar, hanya lebih kecil; menunggu beberapa detik untuk melihat
+   * sesuatu yang sudah terlihat adalah menunggu yang tidak perlu.
+   *
+   * Versi penuh TETAP diambil, tapi di latar dan tanpa menahan apa pun.
+   * Alasannya ada di sisi GAS: pratinjau itu `file.getThumbnail()` dari Drive
+   * — ukurannya beberapa ratus piksel, cukup untuk memutuskan "perlu dibuka
+   * besar atau tidak", tapi TIDAK cukup untuk membaca NIP dan nama di ID card.
+   * Padahal membaca itulah satu-satunya alasan layar ini ada. Jadi yang
+   * dibuang adalah menunggunya, bukan ketajamannya.
+   */
   async _bukaIdCard(playerId) {
     const pemain = (this._team?.members || []).find((m) => m.player_id === playerId);
     if (!pemain) return;
 
-    this._lihat = { playerId, nama: pemain.full_name || pemain.game_nick || '—', memuat: true };
+    const pratinjau = this._idcard?.[playerId]?.dataUrl || null;
+    this._lihat = {
+      playerId,
+      nama: pemain.full_name || pemain.game_nick || '—',
+      dataUrl: pratinjau,
+      // "Mengambil berkas…" hanya untuk yang benar-benar belum punya apa pun
+      // untuk ditampilkan — misalnya pratinjaunya sendiri masih dalam
+      // perjalanan, atau gagal dimuat tadi.
+      memuat: !pratinjau,
+      // Penanda bahwa yang tampil masih versi kecil. Dipakai penampil untuk
+      // mengatakan apa adanya, supaya tidak ada yang menyimpulkan ID card-nya
+      // memang buram lalu menolaknya.
+      kasar: Boolean(pratinjau),
+    };
     this.render();
 
     try {
       const dataUrl = await ambilIdCard(playerId);
       // Pengguna bisa saja sudah menutup penampilnya atau membuka pemain lain.
       if (this._lihat?.playerId !== playerId) return;
-      this._lihat = { ...this._lihat, memuat: false, dataUrl };
+      // Didekode lebih dulu, baru ditukar. Menukar src mentah-mentah membuat
+      // gambar yang sudah terlihat berkedip kosong sesaat — persis kebalikan
+      // dari yang diusahakan di sini.
+      await this._siapkanGambar(dataUrl);
+      if (this._lihat?.playerId !== playerId) return;
+      this._lihat = { ...this._lihat, memuat: false, kasar: false, dataUrl };
     } catch (error) {
       if (this._lihat?.playerId !== playerId) return;
-      this._lihat = { ...this._lihat, memuat: false, galat: error.message || 'Gagal mengambil ID card.' };
+      // Pratinjau yang SUDAH tampil tidak boleh diganti layar galat: yang gagal
+      // cuma upaya menajamkan, dan orangnya masih bisa melihat kartunya.
+      this._lihat = pratinjau
+        ? { ...this._lihat, memuat: false }
+        : { ...this._lihat, memuat: false, galat: error.message || 'Gagal mengambil ID card.' };
     }
     this.render();
+  }
+
+  /** Tunggu gambar selesai didekode supaya penukaran src tidak berkedip. */
+  async _siapkanGambar(dataUrl) {
+    try {
+      const gambar = new Image();
+      gambar.src = dataUrl;
+      await gambar.decode();
+    } catch (error) {
+      // decode() tidak ada di peramban lama, dan bisa menolak untuk gambar yang
+      // toh tetap bisa dilukis. Keduanya bukan alasan membatalkan penukaran —
+      // paling buruk kembali ke perilaku lama, yaitu satu frame berkedip.
+    }
   }
 
   /**
