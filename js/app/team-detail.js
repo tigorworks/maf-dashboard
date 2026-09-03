@@ -22,7 +22,7 @@ import {
 } from '../data/app-state.js';
 import { PICKER_TYPES, uploadTeamFile } from '../data/upload.js';
 import {
-  adalahAdmin, adalahTim, ambilIdCard, ambilKodeTim, bolehLihatIdCard,
+  adalahAdmin, adalahTim, ambilIdCard, ambilKodeTim, bolehLihatIdCard, catatKunjungan,
   ambilJejak, bolehHapusTim, bolehSuntingTim, bolehUnggahTim, buatKodeTim, hapusTim,
   JENIS_KODE, namaJenis, onAuth, sesiSekarang, simpanRoster, UMUR_KODE,
 } from '../data/auth.js';
@@ -465,6 +465,33 @@ const styles = css`
     width: 26px;
     height: 26px;
     object-fit: contain;
+  }
+  /* Hitungan kunjungan. Sebentuk pil seperti .game-tag karena keduanya
+     keterangan — tapi TANPA warna cabor: ia tidak menandai cabor apa pun, dan
+     memakai --tone akan membuatnya tampak seperti badge cabor kedua.
+     Sengaja lebih redup daripada tombol di sebelahnya. Ia angka yang dilihat
+     kalau dicari, bukan yang meminta dilihat. */
+  .kunjungan {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: none;
+    padding: 7px var(--sp-3);
+    font-size: var(--fs-sm);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-pill);
+    /* Tanpa transition & tanpa :hover — lihat alasannya di markup. */
+  }
+  .kunjungan svg {
+    width: 15px;
+    height: 15px;
+    /* Ikon dibiarkan lebih redup dari angkanya: yang dicari orang angkanya,
+       ikonnya hanya penjelas apa arti angka itu. */
+    color: var(--text-faint);
   }
   .body {
     flex: 1;
@@ -1935,6 +1962,21 @@ const styles = css`
     .aksi-layar {
       padding: 7px;
     }
+    /* SENGAJA tidak ikut disembunyikan bersama .game-tag di atas: cabor sudah
+       tertulis di header aplikasi tepat di atasnya, sedangkan hitungan
+       kunjungan tidak ada di tempat lain mana pun. Yang dilakukan hanya
+       memadatkannya — ponsel justru layar tempat sebagian besar PIC membuka
+       panel tim, jadi menyembunyikannya di sana berarti menyembunyikannya
+       dari hampir semua orang. */
+    .kunjungan {
+      gap: 4px;
+      padding: 7px var(--sp-2);
+      font-size: var(--fs-xs);
+    }
+    .kunjungan svg {
+      width: 13px;
+      height: 13px;
+    }
     .bilah-simpan {
       padding: var(--sp-2) var(--sp-3);
     }
@@ -2230,6 +2272,7 @@ export class TeamDetail extends BaseElement {
   constructor() {
     super();
     this._team = null;
+    this._kunjungan = null; // total kunjungan panel tim ini; null = belum/ tak terjawab
     // Dipertahankan lintas render: unggahan memicu render ulang, dan tanpa ini
     // kode yang sudah diketik serta pesan hasilnya akan terhapus.
     this._pesanTeks = '';
@@ -2385,6 +2428,26 @@ export class TeamDetail extends BaseElement {
           <span class="game-tag">
             ${game.logo ? `<img src="${esc(game.logo)}" alt="" />` : ''}${esc(game.label)}
           </span>
+          ${
+            /* Ditaruh SETELAH badge cabor dan SEBELUM tombol-tombol: badge
+               cabor dan hitungan ini sama-sama KETERANGAN, sedangkan Ubah
+               data / Unggah / ✕ adalah AKSI. Mengelompokkan yang sejenis
+               membuat orang tidak perlu mencoba menekan angka yang tidak
+               bisa ditekan.
+               <span>, bukan <button>, dan sengaja TIDAK diberi keadaan hover
+               — apa pun yang berkedip saat disentuh kursor menjanjikan
+               sesuatu akan terjadi.
+               Belum terjawab atau tidak pernah terjawab -> tidak dirender
+               sama sekali. Bukan "0" yang berbohong, dan bukan tempat kosong
+               yang menggeser barisan tombol saat angkanya datang. */
+            this._kunjungan !== null
+              ? `<span class="kunjungan"
+                       title="${num(this._kunjungan)} kali panel tim ini dibuka"
+                       aria-label="${num(this._kunjungan)} kunjungan">
+                   ${IKON_MATA}${num(this._kunjungan)}
+                 </span>`
+              : ''
+          }
           ${
             bolehUbah && !unggah && !foto
               ? this._sunting
@@ -3800,7 +3863,14 @@ export class TeamDetail extends BaseElement {
         this.requestRender();
         // Hanya saat benar-benar berpindah tim — render ulang akibat unggahan
         // tidak boleh merebut fokus dari apa pun yang sedang dipakai.
-        if (timBaru) this._fokusAwal();
+        if (timBaru) {
+          this._fokusAwal();
+          // Satu kunjungan = satu kali panel tim ini dibuka. Dipasang di
+          // cabang `timBaru`, BUKAN di render(): render dipanggil berkali-kali
+          // untuk hal yang bukan kunjungan (membuka kode tim, menyalinnya,
+          // unggahan selesai), dan tiap render akan menambah hitungan.
+          this._catatKunjungan(team.team_id);
+        }
       }, true)
     );
 
@@ -4303,6 +4373,34 @@ export class TeamDetail extends BaseElement {
     if (!team) return false;
     if (!bolehUnggahTim(team)) return false;
     return adalahAdmin() || !caborTerkunci(team.game);
+  }
+
+  /**
+   * Catat kunjungan panel tim ini, lalu tampilkan totalnya.
+   *
+   * Sepenuhnya di LATAR: tidak ada yang menunggunya, dan render pertama panel
+   * tidak tertahan olehnya. Permintaan ke GAS bisa memakan beberapa detik —
+   * menahan panel demi angka hiasan adalah pertukaran yang salah arah.
+   *
+   * Gagal berarti DIAM. Tidak ada pesan, tidak ada tempat kosong, tidak ada
+   * apa pun di layar: orang yang membuka panel tim tidak sedang meminta
+   * hitungan kunjungan, jadi kegagalannya bukan kabar yang berguna baginya.
+   */
+  async _catatKunjungan(teamId) {
+    // Dikosongkan lebih dulu, dan ini SINKRON — sebelum await. Tanpa ini,
+    // hitungan tim sebelumnya masih tertulis di layar sampai jawaban untuk tim
+    // yang baru tiba, dan angka tim lain adalah kesalahan yang tidak terlihat
+    // seperti kesalahan.
+    this._kunjungan = null;
+
+    const jumlah = await catatKunjungan(teamId);
+    if (jumlah === null) return;
+    // Orangnya bisa sudah berpindah tim atau menutup panel selagi permintaan
+    // ini berjalan. Jawaban yang telat tidak boleh menempel di tim yang salah.
+    if (this._team?.team_id !== teamId) return;
+
+    this._kunjungan = jumlah;
+    this.requestRender();
   }
 
   _bolehPerbesar() {
