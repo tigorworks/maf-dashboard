@@ -22,21 +22,31 @@ import { timLengkap } from './rules.js';
  * Kolom sempit (#, Pemain, aksi) tetap px karena isinya berlebar tetap; persen
  * hanya membuatnya melebar tanpa guna di layar besar.
  *
- * Persennya berjumlah 85%, BUKAN 100%, dan itu perhitungan bukan kelalaian:
- * ketiga kolom px berjumlah 162px, yang pada lebar tabel tersempit yang mungkin
- * (1101px — di bawah itu tampilannya jadi kartu) adalah ±15%. Jadi 85% + 15%
- * genap. Kalau persennya ditulis 100%, jumlah seluruh kolom melebihi lebar
- * tabel dan peramban menyusutkan semuanya secara proporsional — hasilnya tetap
- * tidak terpotong, tapi angka di sini berhenti berarti apa pun. Di layar yang
- * lebih lebar, porsi px mengecil dan sisanya dibagikan ke kolom persen.
+ * Persennya berjumlah 77%, BUKAN 100%, dan itu perhitungan bukan kelalaian:
+ * keempat kolom px berjumlah 250px (46 + 72 + 88 + 44 aksi), yang pada lebar
+ * tabel tersempit yang mungkin (1101px — di bawah itu tampilannya jadi kartu)
+ * adalah ±23%. Jadi 77% + 23% genap. Kalau persennya ditulis 100%, jumlah
+ * seluruh kolom melebihi lebar tabel dan peramban menyusutkan semuanya secara
+ * proporsional — hasilnya tetap tidak terpotong, tapi angka di sini berhenti
+ * berarti apa pun. Di layar yang lebih lebar, porsi px mengecil dan sisanya
+ * dibagikan ke kolom persen.
+ *
+ * Angkanya turun dari 85% saat kolom "Kunjungan" (88px) ditambahkan. Menambah
+ * kolom px TANPA mengurangi yang persen adalah cara paling mudah membuat
+ * perhitungan ini diam-diam berhenti benar.
  */
 export const COLUMNS = [
   { key: 'index', label: '#', sortable: false, align: 'right', width: '46px' },
-  { key: 'team_name', label: 'Tim', sortable: true, width: '24%' },
-  { key: 'kontingen', label: 'Kontingen', sortable: true, width: '18%' },
-  { key: 'unit_kerja', label: 'Unit Kerja', sortable: true, width: '17%' },
-  { key: 'pic_name', label: 'PIC / Manager', sortable: true, width: '15%' },
+  { key: 'team_name', label: 'Tim', sortable: true, width: '22%' },
+  { key: 'kontingen', label: 'Kontingen', sortable: true, width: '16%' },
+  { key: 'unit_kerja', label: 'Unit Kerja', sortable: true, width: '15%' },
+  { key: 'pic_name', label: 'PIC / Manager', sortable: true, width: '13%' },
   { key: 'member_count', label: 'Pemain', sortable: true, align: 'right', width: '72px' },
+  // Bersebelahan dengan "Pemain": keduanya kolom angka sempit, dan
+  // mengelompokkannya membuat mata tidak melompati kolom teks di antaranya.
+  // Bisa diurutkan — "tim mana yang paling banyak dilihat" adalah pertanyaan
+  // yang wajar, dan tanpa pengurutan ia harus dicari baris per baris.
+  { key: 'kunjungan', label: 'Kunjungan', sortable: true, align: 'right', width: '88px' },
   { key: 'submission_date', label: 'Didaftarkan', sortable: true, width: '11%' },
 ];
 
@@ -94,6 +104,36 @@ export function setDataset(dataset) {
     players: dataset.players,
     page: 1,
   });
+}
+
+/**
+ * Pasang hitungan kunjungan ke tiap tim. Dipanggil setelah dataset siap.
+ *
+ * Ditempelkan KE OBJEK TIM, bukan disimpan sebagai peta tersendiri di state.
+ * Dua alasan, dan keduanya menentukan:
+ *
+ *   1. sortTeams() membandingkan `baris[key]` — properti pada objek timnya.
+ *      Kolom yang bisa diurutkan HARUS punya nilainya di sana; peta terpisah
+ *      menuntut seluruh jalur pengurutan diubah untuk satu kolom.
+ *   2. Satu sumber kebenaran. Peta di state + nilai di baris berarti dua
+ *      tempat yang bisa berbeda, dan yang berbeda diam-diam.
+ *
+ * Ini mengikuti pola yang sudah ada: `member_count`, `idcard_count`, dan
+ * `foto_count` juga nilai turunan yang menempel di objek tim.
+ *
+ * Tim tanpa entri diberi 0, bukan dibiarkan kosong: kalau daftarnya sudah
+ * datang, "tidak ada entri" memang berarti nol kunjungan. Sebelum daftarnya
+ * datang, propertinya belum ada sama sekali — dan itulah yang membedakan
+ * "belum tahu" (tampil "—") dari "nol" (tampil 0).
+ *
+ * TIDAK menyentuh `phase`: tabel sudah tampil sebelum angka ini datang, dan
+ * kegagalan mengambilnya tidak boleh mengubah keadaan halaman.
+ */
+export function setKunjungan(jumlah) {
+  const peta = jumlah && typeof jumlah === 'object' ? jumlah : {};
+  store.set((state) => ({
+    teams: state.teams.map((team) => ({ ...team, kunjungan: Number(peta[team.team_id]) || 0 })),
+  }));
 }
 
 export function setError(message) {

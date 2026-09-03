@@ -125,3 +125,34 @@ export async function catatKunjungan(teamId, sekarang = Date.now()) {
     return null;
   }
 }
+
+/**
+ * SELURUH hitungan kunjungan sekaligus: { teamId: jumlah }.
+ *
+ * Untuk kolom "Kunjungan" di daftar tim. Satu permintaan untuk seluruh baris —
+ * memanggil `catatKunjungan` per baris berarti 125 permintaan GAS.
+ *
+ * Gagal -> objek KOSONG, bukan null dan bukan melempar. Pemanggilnya merender
+ * tabel; kalau hitungannya tidak ada, kolomnya cukup menampilkan tanda pisah.
+ * Tabel tidak boleh gagal tampil karena angka hiasan tidak bisa diambil.
+ */
+export async function ambilSemuaKunjungan() {
+  try {
+    const hasil = await kirim({ action: 'kunjunganSemua' });
+    const jumlah = hasil?.jumlah;
+    if (!jumlah || typeof jumlah !== 'object' || Array.isArray(jumlah)) return {};
+
+    // Disaring ulang di sisi ini juga. Bukan karena server tidak dipercaya,
+    // tapi karena yang dipakai merender harus dipastikan berupa ANGKA — satu
+    // nilai aneh yang lolos akan tampil apa adanya di dalam tabel.
+    const bersih = {};
+    for (const id of Object.keys(jumlah)) {
+      const n = Number(jumlah[id]);
+      if (Number.isFinite(n) && n > 0) bersih[id] = n;
+    }
+    return bersih;
+  } catch (error) {
+    console.warn('Hitungan kunjungan tidak bisa diambil: ' + error.message);
+    return {};
+  }
+}

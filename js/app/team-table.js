@@ -320,6 +320,13 @@ const styles = css`
     background: var(--surface-inset);
     border-radius: var(--r-pill);
   }
+  /* Hitungan kunjungan yang BELUM tiba. Diberi bentuk yang sama supaya lebar
+     kolom tidak bergeser saat angkanya datang, tapi diredupkan — tanda pisah
+     seterang angka akan terbaca sebagai nilai, padahal artinya "belum tahu". */
+  .count.kosong {
+    color: var(--text-faint);
+    background: transparent;
+  }
   mark {
     padding: 0 1px;
     color: inherit;
@@ -988,6 +995,15 @@ export class TeamTable extends BaseElement {
           </span>
         </td>
         <td class="right" data-label="Pemain"><span class="count">${num(team.member_count)}</span></td>
+        <td class="right" data-label="Kunjungan">${
+          /* undefined = daftar kunjungan belum tiba -> tanda pisah.
+             0 = sudah tiba, tim ini memang belum pernah dibuka.
+             Membedakan keduanya penting: "0" untuk data yang belum datang
+             adalah angka yang berbohong. */
+          team.kunjungan === undefined
+            ? '<span class="count kosong">—</span>'
+            : `<span class="count">${num(team.kunjungan)}</span>`
+        }</td>
         <td data-label="Didaftarkan">${esc(formatDate(team.submission_date) || '—')}</td>
         <td class="aksi" data-label="Aksi">
           <button class="burger" type="button" data-menu="${esc(team.team_id)}"

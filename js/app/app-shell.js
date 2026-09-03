@@ -6,8 +6,9 @@ import { BaseElement, define } from '../core/element.js';
 import { css } from '../core/css.js';
 import { esc } from '../core/format.js';
 import { loadDataset } from '../data/source.js';
+import { ambilSemuaKunjungan } from '../data/kunjungan.js';
 import {
-  derive, kembaliKeDaftar, setAuth, setDataset, setError, setPage, store,
+  derive, kembaliKeDaftar, setAuth, setDataset, setError, setKunjungan, setPage, store,
 } from '../data/app-state.js';
 import { initGameRouting } from '../data/router.js';
 import { adalahAdmin, onAuth, pulihkanSesi } from '../data/auth.js';
@@ -486,6 +487,12 @@ export class AppShell extends BaseElement {
       if (!dataset.teams.length) throw new Error('Dataset kosong — belum ada tim yang terbaca.');
       setDataset(dataset);
       if (applyHash) applyHash();
+      // Hitungan kunjungan diambil SESUDAH dataset dipasang, dan TIDAK
+      // ditunggu: tabel harus tampil dulu. Ia rute tersendiri karena payload
+      // GET di-cache 24 jam — angkanya akan basi sampai sehari kalau ikut ke
+      // dalamnya. Gagal berarti kolomnya menampilkan tanda pisah; tidak ada
+      // galat di layar, dan tabelnya tidak terpengaruh sama sekali.
+      ambilSemuaKunjungan().then(setKunjungan);
     } catch (error) {
       setError(error.message || String(error));
     }
