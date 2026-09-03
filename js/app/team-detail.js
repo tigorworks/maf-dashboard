@@ -151,6 +151,32 @@ const styles = css`
     width: 14px;
     height: 14px;
   }
+  /* Tombol pindah layar (Unggah berkas / Unggah foto / Verifikasi) memakai
+     bentuk yang SAMA PERSIS dengan .ubah: ketiganya aksi setara atas tim yang
+     sedang dibuka, dan membedakan bentuknya hanya akan menyiratkan salah
+     satunya lebih penting. */
+  .aksi-layar {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    flex: none;
+    padding: 7px var(--sp-3);
+    font-size: var(--fs-sm);
+    font-weight: 700;
+    color: var(--text-muted);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-pill);
+    transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+  }
+  .aksi-layar:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+  .aksi-layar svg {
+    width: 14px;
+    height: 14px;
+  }
   .mode-tag.sunting {
     color: #10203f;
     background: var(--gold, var(--accent));
@@ -786,6 +812,14 @@ const styles = css`
     width: 100%;
     height: 100%;
     object-fit: cover;
+  }
+  /* Menggantikan ukuran inline yang dulu menempel di IKON_FOTO. Ikonnya
+     dipakai di sini sebagai gambar pengganti saat foto sudah ada tapi
+     pratinjaunya belum dimuat — bukan mengisi kotak seperti <img>, jadi
+     ukurannya disebut sendiri. */
+  .logo-thumb svg {
+    width: 20px;
+    height: 20px;
   }
   .logo-teks {
     font-size: var(--fs-sm);
@@ -1893,10 +1927,12 @@ const styles = css`
        di semua ukuran layar, jadi tidak ada apa pun yang perlu dilepas. */
     .mode-tag,
     .game-tag,
-    .ubah span {
+    .ubah span,
+    .aksi-layar span {
       display: none;
     }
-    .ubah {
+    .ubah,
+    .aksi-layar {
       padding: 7px;
     }
     .bilah-simpan {
@@ -2113,19 +2149,31 @@ const IKON_SIBUK = '<span class="putar" aria-hidden="true"></span>';
 const GALAT_MENYELURUH =
   /kode tim|sesi berakhir|sesi tidak aktif|relawan tidak boleh|tim tidak ditemukan|belum masuk|endpoint|tidak merespons/i;
 
-const IKON_FOTO = `<svg viewBox="0 0 16 16" fill="none" aria-hidden="true" style="width:20px;height:20px">
+/* TANPA ukuran inline. Ikon ini dipakai dua tempat dengan ukuran berbeda —
+   20 px sebagai gambar pengganti di kotak "Foto bersama", 14 px di tombol
+   pindah layar. Ukuran inline akan mengalahkan CSS keduanya dan memaksa
+   salah satunya salah. */
+const IKON_FOTO = `<svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
   <path d="M2 5.6a1.6 1.6 0 0 1 1.6-1.6h1.1l.8-1.3h4.6l.8 1.3h1.5A1.6 1.6 0 0 1 14 5.6v6.2a1.6 1.6 0 0 1-1.6 1.6H3.6A1.6 1.6 0 0 1 2 11.8V5.6Z"
         stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" />
   <circle cx="8" cy="8.6" r="2.4" stroke="currentColor" stroke-width="1.3" />
 </svg>`;
 
-/* Panah melingkar: "buat ulang". Tanpa teks, bentuk inilah satu-satunya
-   penjelas — jadi lingkarannya dibiarkan hampir penuh dengan satu mata panah,
-   bukan dua busur kecil yang di ukuran 15 px terbaca seperti noda. */
+/* Panah ke atas keluar dari nampan — bentuk yang sama dengan tombol "Unggah
+   berkas" di menu ⋮ daftar tim, supaya aksi yang sama terbaca sama di dua
+   tempat. */
+const IKON_UNGGAH = `<svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+  <path d="M8 10.5V2m0 0L5 5m3-3 3 3M2.5 11v1.5a1.5 1.5 0 0 0 1.5 1.5h8a1.5 1.5 0 0 0 1.5-1.5V11"
+        stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+</svg>`;
+
 const IKON_SILANG = `<svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
   <path d="m4.5 4.5 7 7m0-7-7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
 </svg>`;
 
+/* Panah melingkar: "buat ulang". Tanpa teks, bentuk inilah satu-satunya
+   penjelas — jadi lingkarannya dibiarkan hampir penuh dengan satu mata panah,
+   bukan dua busur kecil yang di ukuran 15 px terbaca seperti noda. */
 const IKON_ULANG = `<svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
   <path d="M13.2 8a5.2 5.2 0 1 1-1.6-3.7" stroke="currentColor" stroke-width="1.6"
         stroke-linecap="round" />
@@ -2270,6 +2318,7 @@ export class TeamDetail extends BaseElement {
     const bolehUnggah = bolehUnggahTim(team);
     const unggah = this._mode === 'berkas' && bolehUnggah;
     const foto = this._mode === 'foto' && bolehUnggah;
+    const bolehUnggahSekarang = this._bolehTawarkanUnggah(team);
     // Berkas yang sudah dipilih tapi belum terkirim. Angkanya dipakai bilah
     // simpan di mode ubah, supaya satu tombol Simpan mengurus keduanya.
     const antreBerkas = Object.keys(this._pilihan).length;
@@ -2344,6 +2393,45 @@ export class TeamDetail extends BaseElement {
                      ${ICON_SUNTING}<span>Ubah data</span>
                    </button>`
               : `<span class="mode-tag">${unggah ? 'Unggah berkas' : foto ? 'Unggah foto' : 'Verifikasi'}</span>`
+          }
+          ${
+            /* Jalan masuk ke layar unggah, dulu HANYA ada di menu ⋮ daftar tim.
+               Yang ditampilkan selalu layar yang SEDANG TIDAK dibuka, jadi
+               tombolnya sekaligus jadi jalan pulang: masuk ke "Unggah berkas"
+               lalu ingin kembali memeriksa, tombol "Verifikasi" sudah ada di
+               tempat yang sama. Tanpa itu, satu-satunya jalan keluar adalah ✕
+               yang membuang orang ke daftar tim — dan ia harus mencari timnya
+               lagi dari awal.
+               Selagi mode ubah menyala, semuanya disembunyikan: berpindah layar
+               di tengah penyuntingan membuang ketikan yang belum disimpan. */
+            bolehUnggahSekarang && !this._sunting
+              ? `${
+                  /* title + aria-label WAJIB, bukan pelengkap: di ponsel
+                     <span> label disembunyikan dengan display:none, dan itu
+                     ikut menghapusnya dari pohon aksesibilitas — tombolnya
+                     jadi tanpa nama sama sekali bagi pembaca layar. */
+                  unggah
+                    ? ''
+                    : `<button class="aksi-layar" type="button" data-act="ke-berkas"
+                               title="Unggah logo &amp; ID card" aria-label="Unggah logo dan ID card">
+                         ${IKON_UNGGAH}<span>Unggah berkas</span>
+                       </button>`
+                }${
+                  foto
+                    ? ''
+                    : `<button class="aksi-layar" type="button" data-act="ke-foto"
+                               title="Unggah foto tim &amp; pemain" aria-label="Unggah foto tim dan pemain">
+                         ${IKON_FOTO}<span>Unggah foto</span>
+                       </button>`
+                }${
+                  unggah || foto
+                    ? `<button class="aksi-layar" type="button" data-act="ke-lihat"
+                               title="Kembali ke layar verifikasi" aria-label="Kembali ke layar verifikasi">
+                         ${IKON_MATA}<span>Verifikasi</span>
+                       </button>`
+                    : ''
+                }`
+              : ''
           }
           ${/* Tombol tutup, bukan lagi "‹ Kembali" berlabel. Tanpa label
                terlihat, keterangannya harus datang dari dua tempat sekaligus:
@@ -3780,6 +3868,26 @@ export class TeamDetail extends BaseElement {
         return;
       }
 
+      // Pindah antar layar tim yang sama. Wewenangnya ditegakkan DI SINI juga,
+      // bukan hanya dengan menyembunyikan tombolnya: menyalakan tombol lewat
+      // DevTools tidak boleh membuka layar yang GAS pasti tolak. Aturan yang
+      // sama persis dipakai render() untuk memutuskan tombolnya tampil.
+      const keLayar = event.target.closest(
+        '[data-act="ke-berkas"], [data-act="ke-foto"], [data-act="ke-lihat"]'
+      );
+      if (keLayar) {
+        const tim = this._team;
+        if (!tim) return;
+        const tujuan = { 'ke-berkas': 'berkas', 'ke-foto': 'foto', 'ke-lihat': null }[
+          keLayar.dataset.act
+        ];
+        // Kembali ke verifikasi selalu boleh — yang dijaga hanya jalan MASUK
+        // ke layar unggah.
+        if (tujuan && !this._bolehTawarkanUnggah(tim)) return;
+        selectTeam(tim.team_id, tujuan);
+        return;
+      }
+
       const lihat = event.target.closest('[data-act="lihat-idcard"]');
       if (lihat) {
         // CSS sudah mematikan sentuhannya di ponsel, tapi penekanan lewat papan
@@ -4176,6 +4284,27 @@ export class TeamDetail extends BaseElement {
    * saat ditekan, bukan disimpan saat dimuat, supaya layar yang diputar atau
    * jendela yang diubah ukurannya langsung mengikuti tanpa render ulang.
    */
+  /**
+   * Bolehkah layar unggah DITAWARKAN untuk tim ini?
+   *
+   * Beda dari `bolehUnggahTim()`: fungsi itu menjawab "punya wewenang mengunggah
+   * atau tidak", sedangkan ini menjawab "pantaskah pintunya dibuka sekarang".
+   * Bedanya satu hal — cabor yang rosternya dikunci panitia menutup unggahan
+   * untuk semua kecuali admin (GAS menegakkannya di `unggahBerkas`). Tanpa
+   * penjaga ini, PIC masuk ke layar unggah, memilih berkas, menunggu unggahan,
+   * lalu baru ditolak saat menekan Simpan.
+   *
+   * Ditaruh sebagai metode, bukan dihitung dua kali, karena dipakai DUA tempat
+   * yang harus selalu sepakat: render() memutuskan tombolnya tampil, dan
+   * penangan klik memutuskan perpindahannya boleh terjadi. Dua salinan aturan
+   * yang sama adalah dua kesempatan untuk berbeda.
+   */
+  _bolehTawarkanUnggah(team) {
+    if (!team) return false;
+    if (!bolehUnggahTim(team)) return false;
+    return adalahAdmin() || !caborTerkunci(team.game);
+  }
+
   _bolehPerbesar() {
     return !window.matchMedia('(max-width: 720px)').matches;
   }
