@@ -6,6 +6,7 @@
 import { createStore } from '../core/store.js';
 import { compare, normalize } from '../core/format.js';
 import { summarize } from './source.js';
+import { timLengkap } from './rules.js';
 
 /*
  * Kolom tabel tim. `width` ditulis sebagai NILAI CSS YANG SAH untuk properti
@@ -403,7 +404,22 @@ export function derive(state = store.state) {
     offset: start,
     page,
     pageCount,
-    stats: summarize(filtered),
+    stats: {
+      ...summarize(filtered),
+      // Berapa tim yang TIDAK kena satu pun aturan validasi (logo, ID card
+      // lengkap, batas TAD, format nick) — lihat rules.js.
+      //
+      // Dihitung DI SINI, bukan di dalam summarize(). summarize() milik
+      // source.js yang tugasnya membentuk data; aturan kelayakan milik
+      // rules.js. Menaruhnya di summarize() berarti source.js ikut bergantung
+      // pada aturan turnamen, dan sport-gate — yang cuma butuh jumlah tim per
+      // cabor — ikut menjalankan pemeriksaan yang tidak dipakainya.
+      //
+      // Mengikuti FILTER aktif, sama seperti angka kartu lainnya: kalau panitia
+      // sedang menyaring satu kontingen, yang ingin ia ketahui adalah
+      // kelengkapan kontingen itu.
+      lengkap: filtered.filter(timLengkap).length,
+    },
     // Pembanding "dari total" dihitung dalam cabor yang sedang dibuka,
     // bukan seluruh dataset — cabor lain bukan konteks yang relevan.
     totalTeams: state.teams.filter((team) => !state.filters.game || team.game === state.filters.game).length,

@@ -186,24 +186,25 @@ function buildFacets(teams) {
 /** Ringkasan atas sekumpulan tim (dipakai untuk kartu statistik & switcher). */
 export function summarize(teams) {
   const kontingen = new Set();
-  const units = new Set();
   const perGame = {};
   let players = 0;
 
   for (const team of teams) {
     if (team.kontingen) kontingen.add(team.kontingen);
-    if (team.unit_kerja) units.add(team.unit_kerja);
     players += team.member_count;
     const bucket = (perGame[team.game] ||= { teams: 0, players: 0 });
     bucket.teams += 1;
     bucket.players += team.member_count;
   }
 
+  // Jumlah unit kerja unik dulu ikut dihitung di sini, untuk kartu "Unit Kerja"
+  // yang kini dibuang. Ikut dilepas supaya tidak tertinggal sebagai hitungan
+  // yang tidak dibaca siapa pun. Field `unit_kerja` PER TIM tetap ada dan
+  // tetap dipakai — kolom di tabel dan baris keterangan di detail tim.
   return {
     teams: teams.length,
     players,
     kontingen: kontingen.size,
-    units: units.size,
     perGame,
   };
 }
