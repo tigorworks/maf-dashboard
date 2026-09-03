@@ -21,8 +21,9 @@ import {
   applyPlayerPatch, applyUpload, buangTim, caborTerkunci, gantiRoster, selectTeam, store,
 } from '../data/app-state.js';
 import { PICKER_TYPES, uploadTeamFile } from '../data/upload.js';
+import { catatKunjungan } from '../data/kunjungan.js';
 import {
-  adalahAdmin, adalahTim, ambilIdCard, ambilKodeTim, bolehLihatIdCard, catatKunjungan,
+  adalahAdmin, adalahTim, ambilIdCard, ambilKodeTim, bolehLihatIdCard,
   ambilJejak, bolehHapusTim, bolehSuntingTim, bolehUnggahTim, buatKodeTim, hapusTim,
   JENIS_KODE, namaJenis, onAuth, sesiSekarang, simpanRoster, UMUR_KODE,
 } from '../data/auth.js';
