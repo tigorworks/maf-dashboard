@@ -126,30 +126,6 @@ export async function kirim(body, { timeout = TIMEOUT } = {}) {
   }
 }
 
-/**
- * Catat satu kunjungan panel detail tim; mengembalikan total kunjungannya.
- *
- * TANPA sesi — yang membuka panel tim sebagian besar peserta yang tidak masuk
- * sama sekali. GAS pun tidak memeriksa wewenang untuk rute ini; yang bisa
- * dilakukannya hanya menambah satu angka.
- *
- * Kegagalan DIKEMBALIKAN sebagai null, bukan dilempar. Ini angka hiasan yang
- * dipanggil di latar: pemanggilnya tidak punya apa pun yang berguna untuk
- * dilakukan atas sebuah kegagalan, dan galat yang muncul di layar hanya akan
- * membuat orang mengira panel timnya rusak. Satu-satunya jejaknya di console.
- */
-export async function catatKunjungan(teamId) {
-  if (!teamId) return null;
-  try {
-    const hasil = await kirim({ action: 'kunjungan', teamId });
-    const jumlah = Number(hasil?.jumlah);
-    return Number.isFinite(jumlah) ? jumlah : null;
-  } catch (error) {
-    console.warn('Kunjungan tidak tercatat: ' + error.message);
-    return null;
-  }
-}
-
 /* ------------------------------ sesi ------------------------------ */
 
 let sesi = null; // { nama, peran, token, sampai }

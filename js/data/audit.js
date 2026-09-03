@@ -63,8 +63,9 @@ export const KETERANGAN = {
     'Kalau pesertanya juga sama, temuannya muncul sebagai "Kiriman ganda".',
   [JENIS.TAD]: `Maksimal ${MAKS_TAD} pemain berstatus TAD dalam satu tim.`,
   [JENIS.NICK]:
-    'Pola nick berbeda per cabor: MLBB memakai titik (REG3. SKYLAR), ' +
-    'PUBG memakai huruf x (REG3xSKYLAR).',
+    'Nick harus diawali inisial tim, lalu nama — misalnya REG3. SKYLAR, ' +
+    'CBxLASAK, REG12・Luci, atau BMTP Joeyy. Pemisahnya bebas; yang ditandai ' +
+    'hanya nick tanpa inisial di depan sama sekali.',
   [JENIS.RANGKAP]:
     'Seseorang tidak boleh bermain di satu tim sekaligus menjadi PIC atau ' +
     'Manager tim lain di cabor yang sama. Dicocokkan menurut NAMA, jadi nama ' +

@@ -1,19 +1,25 @@
 /**
  * Aturan format Nick Game.
  *
- * Nick wajib berpola INISIAL + PEMISAH + NAMA. Pemisahnya BERBEDA PER CABOR:
+ * Nick wajib berpola INISIAL + PEMISAH + NAMA:
  *
- *     MLBB : titik   REG3. SKYLAR    REG3 . SKYLAR    REG3 .SKYLAR
- *     PUBG : huruf x REG3xSKYLAR     CBxLASAK         Reg3 x Supersemar
+ *     REG3. SKYLAR      REG12・LuciFer     BMTP Joeyy
+ *     CBxLASAK          Reg1_Azi           CSBx•voodoo™•
  *
- * Spasi di sekitar pemisah bebas — semuanya sah.
+ * Yang diperiksa cuma ADANYA prefix di depan, bukan pemisah tertentu.
  *
- * Yang diperiksa HANYA POLANYA, bukan isi inisialnya. Versi pertama aturan ini
- * juga mencocokkan inisial dengan kontingen timnya, lengkap dengan daftar
- * singkatan resmi. Itu dilepas: singkatan yang dipakai di lapangan beragam dan
- * sah-sah saja (CMB, DIROPS, YOKKE, H&E), dan pencocokannya menandai nick yang
- * sebenarnya benar sebagai salah. Menegakkan ejaan singkatan adalah pekerjaan
- * panitia saat verifikasi; yang bisa dipertanggungjawabkan mesin cuma bentuknya.
+ * Versi sebelumnya menuntut pemisah SPESIFIK PER CABOR — titik untuk MLBB,
+ * huruf x untuk PUBG. Itu dilonggarkan karena menandai salah nick yang
+ * sebenarnya benar, dan datanya membuktikannya: satu tim PUBG memakai titik
+ * tengah Katakana (`REG12・LuciFer`), satu tim MLBB memakai konvensi x
+ * (`CSBxKayzz`), dan banyak yang memakai spasi (`BMTP Joeyy`). Ketiganya punya
+ * prefix seragam yang jelas terbaca manusia, tapi ditolak mesin hanya karena
+ * memilih tanda yang berbeda. Pemisah yang dipakai di lapangan beragam dan
+ * sah-sah saja — sama seperti alasan pencocokan inisial dengan kontingen
+ * dilepas lebih dulu.
+ *
+ * Yang TETAP ditandai: nick tanpa prefix sama sekali (`Shadow`, `AFK`). Di
+ * situlah pemeriksaan ini masih berguna.
  *
  * Dipisah dari rules.js karena pemeriksaannya PER PEMAIN, sedangkan rules.js
  * menjawab pertanyaan per tim; keduanya bertemu di periksaTim() yang meringkas
@@ -21,78 +27,47 @@
  */
 
 /**
- * Pemisah resmi tiap cabor.
+ * Karakter tak terlihat yang harus dibuang sebelum apa pun diperiksa.
  *
- * Cabor yang tidak terdaftar memakai titik — bawaan yang sama dengan MLBB.
- * Cabor baru tidak boleh langsung dianggap salah semua hanya karena aturannya
- * belum sempat dituliskan di sini.
+ * BUKAN kerapian — ini penentu benar/salah. Dua nick di data nyata berawalan
+ * U+2060 WORD JOINER: `⁠Reg3. Ar` punya prefix yang jelas sah, tapi karena
+ * karakter tak terlihat itu berada di depan, "bagian sebelum pemisah" jadi
+ * berisi karakter hantu dan pemeriksaan bentuk menolaknya. Yang ditandai
+ * salah bukan nick-nya, melainkan sesuatu yang bahkan tidak bisa dilihat
+ * orang yang disuruh membetulkannya.
+ *
+ * Zero-width space/non-joiner/joiner, word joiner, BOM, dan soft hyphen.
  */
-const PEMISAH = {
-  MLBB: { tanda: '.', nama: 'titik', contoh: 'REG3. SKYLAR' },
-  PUBG: { tanda: 'x', nama: 'huruf x', contoh: 'REG3xSKYLAR' },
-};
+const TAK_TERLIHAT = /[​-‍⁠﻿­]/g;
 
-const BAWAAN = PEMISAH.MLBB;
-
-/** Aturan pemisah untuk satu cabor. */
-export function aturanNick(game) {
-  return PEMISAH[String(game || '').trim().toUpperCase()] || BAWAAN;
+/** Nick yang sudah dibersihkan dari karakter hantu dan spasi tepi. */
+function rapikan(nick) {
+  return String(nick || '').replace(TAK_TERLIHAT, '').trim();
 }
 
 /**
- * Periksa satu nick terhadap aturan cabornya.
- *
- * Mengembalikan { ok, kode, pesan }. Kode yang mungkin:
- *   kosong  : nick belum diisi
- *   pemisah : tidak ada pemisah sama sekali
- *   inisial : ada pemisah, tapi bagian depannya kosong
- *   nama    : ada pemisah, tapi tidak ada nama di belakangnya
+ * Contoh untuk pesan galat. Dibiarkan per cabor supaya contohnya terasa
+ * familiar bagi yang membacanya, walau aturannya kini sama untuk semua.
  */
-export function periksaNick(nick, game) {
-  const teks = String(nick || '').trim();
-  if (!teks) return { ok: false, kode: 'kosong', pesan: 'Nick game belum diisi' };
+const CONTOH = {
+  MLBB: 'REG3. SKYLAR',
+  PUBG: 'CBxLASAK',
+};
 
-  const aturan = aturanNick(game);
+const CONTOH_BAWAAN = CONTOH.MLBB;
 
-  // Dipecah di pemisah PERTAMA: kemunculan berikutnya milik nama mainnya
-  // sendiri. "REG3. SKY.LAR" dan "CBxMaxx" tidak boleh dipersoalkan.
-  const posisi = aturan.tanda === 'x' ? cariX(teks) : teks.indexOf(aturan.tanda);
-
-  if (posisi < 0) {
-    return {
-      ok: false,
-      kode: 'pemisah',
-      pesan: `Nick harus berpola inisial, ${aturan.nama}, lalu nama — contoh: ${aturan.contoh}`,
-    };
-  }
-
-  const inisial = teks.slice(0, posisi).trim();
-  const nama = teks.slice(posisi + 1).trim();
-
-  if (!inisial) {
-    return {
-      ok: false,
-      kode: 'inisial',
-      pesan: `Tidak ada inisial sebelum ${aturan.nama} — contoh: ${aturan.contoh}`,
-    };
-  }
-  if (!nama) {
-    return {
-      ok: false,
-      kode: 'nama',
-      pesan: `Tidak ada nama setelah ${aturan.nama} — contoh: ${aturan.contoh}`,
-    };
-  }
-  return { ok: true };
+/** Contoh nick untuk satu cabor. */
+export function aturanNick(game) {
+  const kunci = String(game || '').trim().toUpperCase();
+  return { contoh: CONTOH[kunci] || CONTOH_BAWAAN };
 }
 
 /**
  * Posisi huruf x yang berfungsi sebagai pemisah, atau -1.
  *
- * Berbeda dari titik, x adalah HURUF: ia bisa berada di dalam inisial maupun di
- * dalam nama. Yang dicari adalah x pertama yang benar-benar memisahkan — masih
- * ada sesuatu di kiri dan di kanannya. Karena itu x di ujung tidak dihitung,
- * dan "xNAMA" ditolak sebagai nick tanpa inisial, bukan diterima diam-diam.
+ * x adalah HURUF, jadi ia bisa berada di dalam inisial maupun di dalam nama.
+ * Yang dicari adalah x pertama yang benar-benar MEMISAHKAN — masih ada sesuatu
+ * di kiri dan di kanannya. x di ujung tidak dihitung.
  */
 function cariX(teks) {
   for (let i = 0; i < teks.length; i++) {
@@ -100,14 +75,50 @@ function cariX(teks) {
     if (c !== 'x' && c !== 'X') continue;
     if (teks.slice(0, i).trim() && teks.slice(i + 1).trim()) return i;
   }
-  // x yang ada tapi tidak memisahkan (di ujung) tetap dilaporkan sebagai
-  // posisinya, supaya pesannya menyebut "tidak ada inisial/nama", bukan
-  // "tidak ada pemisah" — keduanya kekeliruan yang berbeda.
-  const kasar = teks.search(/[xX]/);
-  return kasar;
+  return -1;
 }
 
-/** Berapa pemain satu tim yang nick-nya belum sesuai pola cabor timnya. */
+/**
+ * Posisi pemisah non-alfanumerik pertama yang benar-benar memisahkan, atau -1.
+ *
+ * Apa pun yang bukan huruf/angka dihitung sebagai pemisah — titik, spasi,
+ * garis bawah, titik tengah, bullet. Yang penting ada isi di kedua sisinya.
+ */
+function cariPemisah(teks) {
+  for (let i = 0; i < teks.length; i++) {
+    if (/[0-9A-Za-z]/.test(teks[i])) continue;
+    if (teks.slice(0, i).trim() && teks.slice(i + 1).trim()) return i;
+  }
+  return -1;
+}
+
+/**
+ * Periksa satu nick.
+ *
+ * Mengembalikan { ok, kode, pesan }. Kode yang mungkin:
+ *   kosong : nick belum diisi
+ *   prefix : tidak ada inisial di depan nama
+ */
+export function periksaNick(nick, game) {
+  const teks = rapikan(nick);
+  if (!teks) return { ok: false, kode: 'kosong', pesan: 'Nick game belum diisi' };
+
+  // Dua bentuk yang sah, diperiksa berurutan:
+  //   1. pemisah non-alfanumerik apa pun  — REG3. SKYLAR, REG12・Luci, BMTP Joeyy
+  //   2. konvensi huruf x, SEMUA cabor    — CBxLASAK, CSBxKayzz
+  // Nomor 2 tidak bisa digabung ke nomor 1: x adalah huruf, jadi nick bergaya
+  // x tidak punya satu pun karakter non-alfanumerik untuk dijadikan pemisah.
+  if (cariPemisah(teks) >= 0 || cariX(teks) >= 0) return { ok: true };
+
+  const { contoh } = aturanNick(game);
+  return {
+    ok: false,
+    kode: 'prefix',
+    pesan: `Nick harus diawali inisial tim, lalu nama — contoh: ${contoh}`,
+  };
+}
+
+/** Berapa pemain satu tim yang nick-nya belum berprefix. */
 export function nickBermasalah(team) {
   return (team?.members || []).filter((m) => !periksaNick(m.game_nick, team?.game).ok);
 }
