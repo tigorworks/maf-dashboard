@@ -23,12 +23,15 @@ import {
 import { PICKER_TYPES, uploadTeamFile } from '../data/upload.js';
 import { catatKunjungan } from '../data/kunjungan.js';
 import {
-  adalahAdmin, adalahTim, ambilIdCard, ambilKodeTim, bolehLihatIdCard,
+  adalahAdmin, adalahRelawan, adalahTim, ambilIdCard, ambilKodeTim, bolehLihatIdCard,
   ambilJejak, bolehHapusTim, bolehSuntingTim, bolehUnggahTim, buatKodeTim, hapusTim,
   JENIS_KODE, namaJenis, onAuth, sesiSekarang, simpanRoster, UMUR_KODE,
 } from '../data/auth.js';
 import { jamJejak, jarakWaktu, jejakMembuang, perHari } from '../data/jejak.js';
-import { periksaTim } from '../data/rules.js';
+import {
+  NAMA_GOLONGAN, periksaSusunan, periksaTim,
+  SUSUNAN_MAKS_LUAR, SUSUNAN_MIN_ORGANIK, SUSUNAN_TOTAL,
+} from '../data/rules.js';
 import { periksaNick } from '../data/nick.js';
 
 const styles = css`
@@ -1187,6 +1190,233 @@ const styles = css`
   .roster li:hover {
     border-color: var(--border-strong);
   }
+
+  /* ---- kartu yang bisa dipilih (susunan pemain; admin & relawan) ----
+     Kursornya diubah dan tepinya menyala saat disentuh: tanpa itu, kotak
+     centang di sudut kartu terbaca sebagai penanda keadaan, bukan sebagai
+     sesuatu yang bisa ditekan. */
+  .roster li.bisa-pilih {
+    cursor: pointer;
+    /* Warna tepi & latar ikut beranimasi supaya perpindahan terpilih ↔ tidak
+       tidak terbaca sebagai kartu yang berganti, melainkan kartu yang sama
+       berubah keadaan. */
+    transition: border-color var(--dur) var(--ease), background-color var(--dur) var(--ease);
+  }
+  /* Bidang di DALAM kartu yang punya aksinya sendiri tidak boleh mewarisi
+     kursor pilih — menekan gambar ID card memperbesarnya, bukan memilih. */
+  .roster li.bisa-pilih .idcard-gambar {
+    cursor: zoom-in;
+  }
+  .roster li.bisa-pilih:hover {
+    border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  }
+  .roster li.bisa-pilih:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  /* Terpilih ditandai TIGA hal sekaligus — centang, tepi, dan garis tebal di
+     sisi kiri — bukan warna saja: kartunya sendiri sudah berlatar gradien
+     ber-hue per pemain, jadi perbedaan warna latar saja tidak cukup terbaca. */
+  .roster li.terpilih {
+    border-color: var(--accent);
+    background: linear-gradient(160deg, color-mix(in srgb, var(--accent) 16%, transparent), transparent 62%),
+      var(--surface-2);
+  }
+  .roster li.terpilih::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 3px;
+    background: var(--accent);
+  }
+  /* Susunan sudah 5: kartu yang belum terpilih tidak bisa ditambahkan lagi.
+     Diredupkan, TIDAK disembunyikan — datanya tetap perlu dibaca, yang berubah
+     hanya bisa-tidaknya ia ditandai. Isinya sengaja tidak diberi
+     pointer-events: none: gambar ID card di dalamnya tetap boleh diperbesar
+     walaupun pemainnya sedang tidak bisa dipilih. */
+  .roster li.bisa-pilih.penuh {
+    cursor: not-allowed;
+    border-color: var(--border);
+    opacity: 0.55;
+  }
+  .roster li.bisa-pilih.penuh:hover {
+    border-color: var(--border);
+  }
+  .roster li.bisa-pilih.penuh .pilih-kotak {
+    border-style: dashed;
+  }
+  .pilih-kotak {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 20px;
+    height: 20px;
+    color: transparent;
+    background: var(--surface-inset);
+    border: 1.5px solid var(--border-strong);
+    border-radius: var(--r-xs);
+    transition: color var(--dur) var(--ease), background-color var(--dur) var(--ease),
+      border-color var(--dur) var(--ease);
+  }
+  .terpilih .pilih-kotak {
+    color: var(--bg);
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .pilih-kotak svg {
+    width: 13px;
+    height: 13px;
+  }
+
+  /* ---- pita hasil pemeriksaan susunan ----
+     Menempel di DASAR layar, bentuk yang sama dengan .bilah-simpan: memilih
+     lima pemain berarti menggulir melewati delapan kartu, dan pesan yang
+     hanya berdiri di atas roster sudah keluar layar tepat saat ia mulai
+     berarti. Keduanya tidak pernah tampil bersamaan — pita ini hanya ada di
+     layar verifikasi, .bilah-simpan hanya di mode ubah. */
+  .bilah-susunan {
+    position: sticky;
+    bottom: 0;
+    z-index: 8;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-2) var(--sp-3);
+    margin-top: var(--sp-4);
+    padding: var(--sp-3) var(--tepi);
+    background: var(--header-bg);
+    backdrop-filter: blur(14px);
+    border-top: 1px solid var(--border-strong);
+  }
+  .bilah-susunan.sah {
+    border-top-color: #45c47a;
+    background: linear-gradient(0deg, rgba(69, 196, 122, 0.12), var(--header-bg));
+  }
+  .bilah-susunan.langgar {
+    border-top-color: var(--peringatan);
+    background: linear-gradient(0deg, color-mix(in srgb, var(--peringatan) 12%, transparent), var(--header-bg));
+  }
+  .bilah-susunan > svg {
+    flex: none;
+    width: 17px;
+    height: 17px;
+  }
+  .bilah-susunan.sah > svg {
+    color: #45c47a;
+  }
+  .bilah-susunan.langgar > svg {
+    color: var(--peringatan);
+  }
+  .sus-judul {
+    font-size: var(--fs-sm);
+    font-weight: 800;
+    white-space: nowrap;
+  }
+  .bilah-susunan.sah .sus-judul {
+    color: #45c47a;
+  }
+  .bilah-susunan.langgar .sus-judul {
+    color: var(--peringatan);
+  }
+  /* Hitungan per golongan berdiri sebagai angka, bukan kalimat: yang dikerjakan
+     panitia adalah menambah/mengurangi sampai angkanya benar, dan angka yang
+     terkubur di dalam kalimat memaksa kalimatnya dibaca ulang tiap klik. */
+  .sus-hitung {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+  }
+  .sus-chip {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 3px 10px;
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    color: var(--text-muted);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-pill);
+  }
+  .sus-chip b {
+    font-size: var(--fs-sm);
+    font-weight: 800;
+    color: var(--text);
+  }
+  .sus-chip.pas {
+    color: #45c47a;
+    border-color: rgba(69, 196, 122, 0.4);
+  }
+  .sus-chip.pas b {
+    color: #45c47a;
+  }
+  .sus-chip.lewat {
+    color: var(--peringatan);
+    border-color: color-mix(in srgb, var(--peringatan) 40%, transparent);
+  }
+  .sus-chip.lewat b {
+    color: var(--peringatan);
+  }
+  .sus-ket {
+    flex: 1;
+    min-width: 160px;
+    font-size: var(--fs-xs);
+    color: var(--text-muted);
+  }
+  .sus-langgar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+    flex: 1;
+    min-width: 160px;
+  }
+  /* Butir bawaannya HENING, dan hanya menyala merah di dalam pita yang benar
+     berstatus melanggar. Susunan yang baru terisi tiga dari lima pemain belum
+     melanggar apa pun — ia belum selesai; mewarnainya merah membuat setiap
+     klik pertama terbaca sebagai kesalahan. */
+  .sus-butir {
+    padding: 2px 10px;
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-pill);
+  }
+  .bilah-susunan.langgar .sus-butir {
+    color: var(--text);
+    background: color-mix(in srgb, var(--peringatan) 16%, transparent);
+    border-color: color-mix(in srgb, var(--peringatan) 32%, transparent);
+  }
+  /* Keterangan sekunder: kenapa kartu lain meredup. Sengaja lebih hening dari
+     .sus-ket — ia bukan hasil pemeriksaan, hanya penjelasan keadaan layar. */
+  .sus-nota {
+    flex: none;
+    font-size: var(--fs-xs);
+    color: var(--text-faint);
+  }
+  .sus-bersih {
+    flex: none;
+    padding: 6px var(--sp-3);
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    color: var(--text-muted);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-pill);
+    transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+  }
+  .sus-bersih:hover:not(:disabled) {
+    color: var(--text);
+    border-color: var(--border-strong);
+  }
+  .sus-bersih:disabled {
+    color: var(--text-faint);
+    cursor: not-allowed;
+  }
+
   /* Nomor slot sebagai angka hantu, bukan badge kaku. */
   .slot {
     position: absolute;
@@ -1984,6 +2214,21 @@ const styles = css`
     .bilah-ket {
       display: none;
     }
+    /* Pita susunan dipadatkan, TIDAK dipangkas — beda dari .bilah-ket di atas
+       yang memang cuma mengulang apa yang sudah tertulis di tombolnya. Isi
+       pita ini SATU-SATUNYA tempat hasil pemeriksaan muncul, dan justru di
+       ponsel kartunya satu kolom sehingga pemain kelima berada paling jauh
+       dari tempat hasilnya terbaca. Keterangan dan butir pelanggaran turun ke
+       barisnya sendiri lewat flex-wrap, bukan disembunyikan.
+       env(safe-area-inset-bottom): pita ini menempel di dasar layar, dan di
+       iPhone dasar layar itu tempat batang gestur berada. */
+    .bilah-susunan {
+      gap: var(--sp-2);
+      padding: var(--sp-2) var(--sp-3) calc(var(--sp-2) + env(safe-area-inset-bottom));
+    }
+    .sus-bersih {
+      margin-left: auto;
+    }
     .bilah-simpan button {
       flex: 1;
     }
@@ -2174,6 +2419,14 @@ const IKON_CEK = `<svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
         stroke-linecap="round" stroke-linejoin="round" />
 </svg>`;
 
+/* Centang TANPA lingkaran — untuk kotak pilih di kartu pemain. Dipisah dari
+   IKON_CEK karena lingkarannya, di dalam kotak 20 px berisi, terbaca sebagai
+   noda alih-alih sebagai centang. */
+const IKON_CENTANG = `<svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+  <path d="m3.4 8.6 3.2 3.2 6-7" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round" />
+</svg>`;
+
 /* Penanda "sedang berjalan". Berputar, BUKAN batang kemajuan: menyimpan roster
    adalah satu permintaan tunggal — batang yang merayap sendiri hanya mengarang
    kemajuan yang tidak diketahui siapa pun, termasuk oleh halaman ini. */
@@ -2306,6 +2559,11 @@ export class TeamDetail extends BaseElement {
     // { galat }. Diminta atas permintaan, bukan saat panel dibuka — lihat
     // _grupRiwayat().
     this._riwayat = null;
+    // Pemain yang sedang dipilih untuk pemeriksaan komposisi susunan, sebagai
+    // Set kunci pemain. Murni keadaan LAYAR: tidak pernah dikirim ke GAS dan
+    // tidak ikut disimpan — panitia memakainya untuk mencoba-coba susunan
+    // sebelum mengumumkannya, dan mencoba-coba tidak boleh mengubah data.
+    this._terpilih = new Set();
   }
 
   render() {
@@ -2333,6 +2591,18 @@ export class TeamDetail extends BaseElement {
     const bolehUbah = admin || (timSendiri && !caborTerkunci(team.game));
     // ID card tim lain tidak akan dikirim GAS, jadi jangan diminta sama sekali.
     const bolehIdCard = bolehLihatIdCard(team);
+    // Memilih pemain untuk memeriksa komposisi susunan: HANYA admin & relawan.
+    // Ia alat kerja panitia — yang memutuskan sah atau tidaknya sebuah susunan
+    // adalah panitia, bukan PIC kontingen, dan menampilkannya kepada PIC hanya
+    // akan melahirkan "aplikasinya bilang susunan saya sah". Tidak perlu
+    // ditegakkan di GAS karena tidak ada yang dikirim: seluruh pemeriksaan ini
+    // hidup di browser, di atas data yang sudah ada di layar.
+    const bolehPilih = admin || adalahRelawan();
+    // Susunan hanya 5 pemain, dan itu ditegakkan sebagai BATAS PILIHAN, bukan
+    // sebagai pelanggaran yang dilaporkan sesudahnya: memilih orang keenam lalu
+    // dimarahi pita adalah dua langkah untuk sesuatu yang tidak pernah boleh
+    // terjadi sama sekali.
+    const susunanPenuh = bolehPilih && this._susunanPenuh(members);
 
     // Keadaan Kode Tim ditanyakan sekali saat panel dibuka.
     //
@@ -2538,7 +2808,17 @@ export class TeamDetail extends BaseElement {
                 bolehUbah && this._sunting
                   ? this._roster.map((baris, i) => this._formSunting(baris, i + 1)).join('')
                   : members
-                      .map((member, index) => this._card(member, index + 1, { sesi: bolehIdCard, admin }))
+                      .map((member, index) =>
+                        this._card(member, index + 1, {
+                          sesi: bolehIdCard,
+                          admin,
+                          pilih: bolehPilih && !this._sunting,
+                          // Dihitung SEKALI di luar map: tiap kartu perlu
+                          // jawaban yang sama, dan menghitungnya per kartu
+                          // berarti menyaring seluruh roster delapan kali.
+                          penuh: susunanPenuh,
+                        })
+                      )
                       .join('')
               }
             </ol>
@@ -2559,6 +2839,7 @@ export class TeamDetail extends BaseElement {
                 : ''
             }
           </section>
+          ${bolehPilih && !this._sunting ? this._bilahSusunan(members) : ''}
           ${
             this._sunting
               ? `<div class="bilah-simpan ${this._menyimpan ? 'mengirim' : ''}">
@@ -3152,6 +3433,173 @@ export class TeamDetail extends BaseElement {
       </div>`;
   }
 
+  /* ==================== susunan pemain (admin & relawan) ==================== */
+
+  /** Bolehkah sesi sekarang memilih pemain? Satu tempat, dipakai render & klik. */
+  _bolehPilih() {
+    return adalahAdmin() || adalahRelawan();
+  }
+
+  /**
+   * Anggota yang sedang terpilih, dalam urutan roster.
+   *
+   * Diturunkan dari `members` dan bukan dari isi `_terpilih` langsung: kunci
+   * yang tertinggal karena pemainnya sudah dihapus tidak boleh ikut dihitung —
+   * kalau tidak, susunan bisa dinyatakan lengkap oleh pemain yang sudah tidak
+   * ada di tim.
+   */
+  _anggotaTerpilih(members) {
+    return (members || []).filter((m, i) => this._terpilih.has(this._kunciPemain(m, i + 1)));
+  }
+
+  /**
+   * Apakah susunan sudah penuh — 5 pemain terpilih?
+   *
+   * Dihitung dari ROSTER, bukan dari `_terpilih.size`: kunci pemain yang sudah
+   * dihapus dari tim masih bisa tertinggal di himpunan, dan menghitungnya akan
+   * mengunci kartu keenam padahal yang terpilih baru empat orang sungguhan.
+   */
+  _susunanPenuh(members) {
+    return this._anggotaTerpilih(members || this._team?.members).length >= SUSUNAN_TOTAL;
+  }
+
+  /**
+   * Pilih / lepas satu pemain, lalu gambar ulang pita dan kartunya.
+   *
+   * MELEPAS selalu boleh; MENAMBAH ditolak begitu susunannya penuh. Batasnya
+   * ditegakkan di sini — bukan cuma dengan meredupkan kartunya — karena
+   * penekanan lewat papan ketik dan kelas yang dicabut lewat DevTools tidak
+   * melewati CSS.
+   *
+   * Dengan penjaga ini, pelanggaran 'total-lebih' di periksaSusunan() tidak
+   * lagi bisa lahir dari layar. Ia TETAP ada di sana: yang dijaga di sini
+   * adalah satu pintu masuk, sedangkan periksaSusunan() adalah aturannya —
+   * dan aturan yang benar tidak boleh bergantung pada siapa yang memanggilnya.
+   */
+  _togglePilih(kunci) {
+    if (!kunci || !this._bolehPilih()) return;
+    if (this._terpilih.has(kunci)) this._terpilih.delete(kunci);
+    else if (this._susunanPenuh()) return;
+    else this._terpilih.add(kunci);
+    this.render();
+    // Fokus dikembalikan ke kartu yang baru ditekan: render() menulis ulang
+    // seluruh innerHTML, jadi elemen yang tadinya fokus sudah tidak ada lagi
+    // dan penekanan lewat papan ketik akan terlempar ke awal halaman.
+    this.$(`li[data-kunci="${CSS.escape(kunci)}"]`)?.focus();
+  }
+
+  _bersihkanPilihan() {
+    if (!this._terpilih.size) return;
+    this._terpilih.clear();
+    this.render();
+  }
+
+  /**
+   * Pita hasil pemeriksaan komposisi susunan.
+   *
+   * Empat keadaan, dan bedanya penting: KOSONG (belum memilih siapa pun),
+   * KURANG (sedang diisi, belum sampai lima), SAH, dan MELANGGAR. Menggabungkan
+   * "kurang" dengan "melanggar" akan membuat klik pertama pada kartu mana pun
+   * langsung dijawab pita merah — dan pita merah yang selalu menyala berhenti
+   * dibaca jauh sebelum susunannya benar-benar salah.
+   *
+   * Chip organik/PKWT sengaja TANPA penyebut: yang mengikat cuma batas atas
+   * TAD/KRIYA, jadi "3/3" akan membaca seperti kuota yang tidak boleh dilewati
+   * — padahal lima organik justru susunan terbaik yang bisa diturunkan tim.
+   * Yang bawa penyebut hanyalah dua angka yang benar-benar punya batas:
+   * TAD/KRIYA dan total pemain.
+   */
+  _bilahSusunan(members) {
+    const daftar = members || [];
+    if (!daftar.length) return '';
+
+    const hasil = periksaSusunan(this._anggotaTerpilih(daftar));
+    const nada = hasil.kosong
+      ? ''
+      : hasil.masalah.length
+        ? 'langgar'
+        : hasil.valid
+          ? 'sah'
+          : 'kurang';
+
+    const chip = (nama, jumlah, batas, kelas = '', judulChip = '') =>
+      `<span class="sus-chip ${kelas}"${judulChip ? ` title="${esc(judulChip)}"` : ''}>${esc(
+        nama
+      )} <b>${num(jumlah)}</b>${batas ? `/${num(batas)}` : ''}</span>`;
+
+    const judul = hasil.kosong
+      ? 'Belum ada pemain terpilih'
+      : hasil.masalah.length
+        ? 'Susunan melanggar aturan'
+        : hasil.valid
+          ? 'Susunan memenuhi syarat'
+          : 'Susunan belum lengkap';
+
+    return `
+      <div class="bilah-susunan ${nada}" role="status" aria-live="polite">
+        ${nada === 'sah' ? IKON_CEK : nada === 'langgar' ? IKON_PERINGATAN : ''}
+        <span class="sus-judul">${esc(judul)}</span>
+        <span class="sus-hitung">
+          ${chip(
+            NAMA_GOLONGAN.organik,
+            hasil.organik,
+            0,
+            hasil.organik >= SUSUNAN_MIN_ORGANIK ? 'pas' : '',
+            `Minimal ${SUSUNAN_MIN_ORGANIK} — tidak ada batas atas`
+          )}
+          ${chip(
+            NAMA_GOLONGAN.luar,
+            hasil.luar,
+            SUSUNAN_MAKS_LUAR,
+            hasil.luar > SUSUNAN_MAKS_LUAR ? 'lewat' : '',
+            `Maksimal ${SUSUNAN_MAKS_LUAR} per susunan`
+          )}
+          ${chip(
+            'Total',
+            hasil.total,
+            SUSUNAN_TOTAL,
+            hasil.total > SUSUNAN_TOTAL ? 'lewat' : hasil.valid ? 'pas' : ''
+          )}
+        </span>
+        ${
+          hasil.masalah.length
+            ? `<span class="sus-langgar">
+                 ${hasil.masalah.map((m) => `<span class="sus-butir">${esc(m.pesan)}</span>`).join('')}
+               </span>`
+            : `<span class="sus-ket">
+                 ${
+                   hasil.kosong
+                     ? `Tandai ${num(SUSUNAN_TOTAL)} pemain yang diturunkan — maksimal
+                        ${num(SUSUNAN_MAKS_LUAR)} ${esc(NAMA_GOLONGAN.luar)}, sisanya
+                        ${esc(NAMA_GOLONGAN.organik)}.`
+                     : hasil.valid
+                       ? `${num(hasil.organik)} ${esc(NAMA_GOLONGAN.organik)} dan
+                          ${num(hasil.luar)} ${esc(NAMA_GOLONGAN.luar)} — sesuai ketentuan.`
+                       : `Kurang ${num(hasil.kurang)} pemain lagi. Sisa slot
+                          ${esc(NAMA_GOLONGAN.luar)}: ${num(
+                           Math.max(0, SUSUNAN_MAKS_LUAR - hasil.luar)
+                         )}.`
+                 }
+               </span>`
+        }
+        ${
+          /* Alasan kartu lain meredup. Tanpa kalimat ini, batas 5 terbaca
+             sebagai layar yang berhenti merespons — dan yang pertama dicoba
+             orang adalah menekan kartunya lagi lebih keras, bukan melepas
+             salah satu pilihannya. */
+          hasil.total >= SUSUNAN_TOTAL
+            ? `<span class="sus-nota">
+                 Susunan penuh — lepas satu pemain untuk menggantinya.
+               </span>`
+            : ''
+        }
+        <button class="sus-bersih" type="button" data-act="bersih-susunan"
+                ${hasil.total ? '' : 'disabled'}>
+          Bersihkan pilihan
+        </button>
+      </div>`;
+  }
+
   /** Lapisan penuh di atas panel untuk memeriksa satu ID card. */
   /**
    * Riwayat perubahan TIM INI — siapa mengubah apa, kapan. Khusus admin.
@@ -3363,7 +3811,25 @@ export class TeamDetail extends BaseElement {
       </div>`;
   }
 
-  _card(member, slot, { sesi, admin }) {
+  /**
+   * Kunci stabil satu pemain untuk himpunan pilihan.
+   *
+   * `player_id` kalau ada. Pemain tanpa id — barisan yang baru ditambah dan
+   * belum tersimpan — dijatuhkan ke nomor slotnya, karena kunci yang kosong
+   * akan membuat SELURUH pemain tanpa id terpilih bersamaan sebagai satu benda.
+   */
+  _kunciPemain(member, slot) {
+    return member?.player_id || `slot-${slot}`;
+  }
+
+  _card(member, slot, { sesi, admin, pilih = false, penuh = false }) {
+    const kunci = this._kunciPemain(member, slot);
+    const dipilih = pilih && this._terpilih.has(kunci);
+    // Kartu keenam: masih terbaca, tapi tidak bisa ditambahkan. Diredupkan dan
+    // ber-aria-disabled, BUKAN dibuang dari urutan Tab — pemain yang tidak
+    // bisa dipilih tetap pemain yang perlu dibaca, dan yang memakai pembaca
+    // layar justru harus mendengar alasan kenapa kartunya menolak.
+    const terkunci = pilih && penuh && !dipilih;
     const nick = member.game_nick || '';
     // Nick wajib berformat "INISIAL. NAMA". Ditandai di kartunya sendiri, bukan
     // hanya dihitung di lencana tabel: yang memperbaikinya perlu tahu SIAPA.
@@ -3379,10 +3845,36 @@ export class TeamDetail extends BaseElement {
     const pratinjau = this._idcard?.[pid];
 
     return `
-      <li style="--hue:${hueOf(nick || nama)}" data-player="${esc(pid)}">
+      <li style="--hue:${hueOf(nick || nama)}" data-player="${esc(pid)}"
+          class="${pilih ? 'bisa-pilih' : ''}${dipilih ? ' terpilih' : ''}${
+      terkunci ? ' penuh' : ''
+    }"
+          ${
+            /* role="checkbox" + tabindex, bukan <button> pembungkus: kartu ini
+               memuat tombol lain di dalamnya (perbesar ID card), dan tombol di
+               dalam tombol adalah markup yang tidak sah — peramban akan
+               membuang salah satunya. Penekanan papan ketik ditangani di
+               keydown, lihat onMount(). */
+            pilih
+              ? `data-act="pilih-pemain" data-kunci="${esc(kunci)}" tabindex="0"
+                 role="checkbox" aria-checked="${dipilih ? 'true' : 'false'}"
+                 ${terkunci ? 'aria-disabled="true"' : ''}
+                 ${
+                   terkunci
+                     ? `title="Susunan sudah ${SUSUNAN_TOTAL} pemain — lepas salah satu dulu"`
+                     : ''
+                 }
+                 aria-label="Pilih ${esc(nama)} untuk susunan pemain"`
+              : ''
+          }>
         <span class="slot">${slot}</span>
 
         <div class="top">
+          ${
+            pilih
+              ? `<span class="pilih-kotak" aria-hidden="true">${dipilih ? IKON_CENTANG : ''}</span>`
+              : ''
+          }
           <span class="avatar" aria-hidden="true">${esc(initials(nama))}</span>
           <span class="ident">
             <span class="nama-pemain">${esc(nama)}</span>
@@ -3490,6 +3982,10 @@ export class TeamDetail extends BaseElement {
    */
   _mulaiSunting() {
     this._uid = 0;
+    // Roster boleh berubah susunannya, bertambah, atau berkurang di dalam mode
+    // ubah. Pilihan susunan yang dibuat atas roster LAMA tidak lagi menunjuk
+    // orang yang sama setelahnya, jadi ia dibuang di pintu masuk.
+    this._terpilih.clear();
     // Nama tim ikut disunting. Disimpan terpisah dari _roster karena ia milik
     // TIM, bukan salah satu pemainnya — dan render ulang tidak boleh
     // mengembalikannya ke nama lama selagi orang masih mengetik.
@@ -3853,6 +4349,11 @@ export class TeamDetail extends BaseElement {
           this._hapus = null;
           this._namaTim = null;
           this._riwayat = null;
+          // Susunan terikat pada SATU tim. Membawanya ke tim berikutnya berarti
+          // memeriksa komposisi tim B dengan pilihan yang dibuat di tim A —
+          // dan kunci yang kebetulan sama (mis. "slot-1") akan tampil terpilih
+          // di sana tanpa ada yang pernah menekannya.
+          this._terpilih.clear();
           this._lepasPilihan();
         }
         // Mode ditentukan menu baris: "Unggah berkas" -> layar unggah,
@@ -3884,6 +4385,9 @@ export class TeamDetail extends BaseElement {
         // menawarkan tombol yang pasti dijawab "Sesi berakhir" oleh GAS.
         if (this._hapus && !this._bolehUbah()) this._hapus = null;
         if (this._lihat && !sesiSekarang()) this._lihat = null;
+        // Keluar atau berganti peran mencabut alat susunan; pilihannya ikut
+        // dibuang supaya masuk kembali tidak menghidupkan pilihan orang lain.
+        if (!this._bolehPilih()) this._terpilih.clear();
         if (this._team) this.requestRender();
       })
     );
@@ -4067,8 +4571,44 @@ export class TeamDetail extends BaseElement {
         return;
       }
 
+      if (event.target.closest('[data-act="bersih-susunan"]')) {
+        this._bersihkanPilihan();
+        return;
+      }
+
+      /* Memilih pemain diperiksa PALING AKHIR di antara aksi yang berada di
+         dalam kartu. Kartunya sendiri yang memikul data-act, jadi klik pada
+         tombol apa pun di dalamnya juga cocok dengan selektor ini — yang
+         menyelamatkan urutannya adalah `return` di penangan yang lebih
+         spesifik di atas, bukan selektornya. */
+      const pilih = event.target.closest('[data-act="pilih-pemain"]');
+      if (pilih) {
+        // Menyorot teks di dalam kartu (mis. menyalin ID game) berakhir dengan
+        // satu klik juga. Tanpa penjaga ini, setiap penyalinan ikut mengubah
+        // susunan — perubahan yang tidak diminta dan tidak disadari.
+        const sorot = this.shadowRoot.getSelection?.() || document.getSelection();
+        if (sorot && !sorot.isCollapsed) return;
+        // Ditegakkan di sini juga: kartu yang diberi data-act lewat DevTools
+        // tidak boleh membuka alat kerja panitia untuk peran lain.
+        if (this._bolehPilih()) this._togglePilih(pilih.dataset.kunci);
+        return;
+      }
+
       const tombol = event.target.closest('.unggah');
       if (tombol) this._pilihBerkas(tombol.dataset.kind);
+    });
+
+    /* Papan ketik: Spasi & Enter pada kartu yang sedang fokus. Diikat ke
+       `event.target === kartu` — bukan ke closest() — supaya Enter pada tombol
+       "perbesar ID card" di dalam kartu tidak ikut mengubah pilihan. */
+    this.listen(this.shadowRoot, 'keydown', (event) => {
+      if (event.key !== ' ' && event.key !== 'Enter') return;
+      const kartu = event.target;
+      if (!kartu?.matches?.('li[data-act="pilih-pemain"]')) return;
+      // Spasi menggulir halaman kalau dibiarkan — dan halaman yang melompat
+      // saat memilih pemain kelima membuat pita hasilnya hilang dari pandangan.
+      event.preventDefault();
+      if (this._bolehPilih()) this._togglePilih(kartu.dataset.kunci);
     });
 
     this.listen(this.shadowRoot, 'change', (event) => {
