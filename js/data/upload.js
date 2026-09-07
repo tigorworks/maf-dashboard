@@ -240,6 +240,72 @@ function muatGambar(url) {
   });
 }
 
+/**
+ * Siapkan FOTO: pertahankan berkas aslinya.
+ *
+ * Tiga jalur, berurutan:
+ *
+ *   1. Formatnya sudah diterima GAS (JPEG/PNG/WebP) dan ukurannya muat ->
+ *      dikirim APA ADANYA. Tidak didekode, tidak digambar ke canvas, tidak
+ *      di-encode ulang. Nol kehilangan mutu.
+ *
+ *   2. Format lain (HEIC dari iPhone) -> didekode lalu di-encode jadi JPEG
+ *      RESOLUSI PENUH, mutu 0,95. Bukan WebP, dan TIDAK dikecilkan.
+ *      Kenapa tidak disimpan sebagai HEIC apa adanya: GAS hanya menerima
+ *      JPEG/PNG/WebP, dan yang lebih menentukan — berkas .heic di dalam ZIP
+ *      unduhan tidak bisa dibuka begitu saja di Windows, sehingga "aslinya
+ *      dipertahankan" justru berujung berkas yang tak terpakai.
+ *
+ *   3. Masih melebihi batas -> baru dikecilkan bertahap. Ini jalan terakhir:
+ *      lebih baik foto yang sedikit lebih kecil daripada unggahan yang gagal
+ *      dan tidak menyisakan apa pun.
+ */
+async function siapkanFoto(file, maxBytes) {
+  const batas = Number(maxBytes) || 0;
+
+  if (ACCEPTED_TYPES.indexOf(file.type) !== -1 && (!batas || file.size <= batas)) {
+    return { mimeType: file.type, base64: await toBase64(file), bytes: file.size };
+  }
+
+  // Didekode lewat jalur berlapis yang sama dengan compressImage, jadi HEIC
+  // ikut tertangani (createImageBitmap -> <img> -> libheif WASM).
+  const { sumber, lebar, tinggi, lepas } = await dekodeGambar(file);
+  try {
+    // Percobaan pertama: resolusi PENUH, mutu tinggi.
+    var hasil = await keJpeg(sumber, lebar, tinggi, 0.95);
+    if (!batas || hasil.bytes <= batas) return hasil;
+
+    // Jalan terakhir. Sisi terpanjang diturunkan bertahap sampai muat —
+    // berhenti di 1600px supaya foto tetap berguna untuk cetak ukuran sedang,
+    // dan kalau di situ masih tidak muat, biarkan pemanggilnya yang menolak
+    // dengan pesan ukuran, bukan diam-diam mengirim yang terlalu besar.
+    for (const sisi of [3000, 2400, 2000, 1600]) {
+      const skala = Math.min(1, sisi / Math.max(lebar, tinggi));
+      hasil = await keJpeg(
+        sumber,
+        Math.max(1, Math.round(lebar * skala)),
+        Math.max(1, Math.round(tinggi * skala)),
+        0.9
+      );
+      if (hasil.bytes <= batas) return hasil;
+    }
+    return hasil;
+  } finally {
+    lepas();
+  }
+}
+
+/** Gambar sumber ke canvas berukuran w×h lalu encode JPEG. */
+async function keJpeg(sumber, width, height, mutu) {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  canvas.getContext('2d').drawImage(sumber, 0, 0, width, height);
+  const blob = await toBlob(canvas, 'image/jpeg', mutu);
+  if (!blob) throw new Error('Gagal memproses foto.');
+  return { mimeType: blob.type, base64: await toBase64(blob), bytes: blob.size };
+}
+
 function toBlob(canvas, type, quality) {
   return new Promise((resolve) => canvas.toBlob(resolve, type, quality));
 }
@@ -274,7 +340,17 @@ export async function uploadTeamFile({ endpoint, teamId, playerId, token, kind, 
   if (!token) throw new Error('Masuk dulu untuk mengunggah berkas.');
   if (kind === 'idcard' && !playerId) throw new Error('Pemain belum dipilih.');
 
-  const { mimeType, base64, bytes } = await compressImage(file);
+  // FOTO dipertahankan seaslinya; logo & ID card tetap dikompres.
+  //
+  // Bedanya keperluan: foto tim dipakai untuk bahan cetak dan desain, jadi
+  // mengecilkannya ke 1024px lalu meng-encode ulang jadi WebP membuang persis
+  // yang dibutuhkan. Logo hanya tampil sebesar beberapa puluh piksel di layar,
+  // dan ID card cuma perlu terbaca — untuk keduanya, unggahan yang cepat lebih
+  // berharga daripada piksel yang tidak akan pernah dilihat.
+  const { mimeType, base64, bytes } = kind === 'foto'
+    ? await siapkanFoto(file, maxBytes)
+    : await compressImage(file);
+
   if (maxBytes && bytes > maxBytes) {
     throw new Error(`Gambar masih terlalu besar (${Math.round(bytes / 1024)} KB). Coba gambar lain.`);
   }
