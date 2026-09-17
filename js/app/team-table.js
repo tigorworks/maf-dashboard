@@ -295,21 +295,6 @@ const styles = css`
     white-space: nowrap;
     vertical-align: middle;
   }
-  .pic {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    max-width: 100%;
-  }
-  .pic > * {
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .pic .nip {
-    font-family: var(--font-mono);
-    font-size: var(--fs-xs);
-    color: var(--text-faint);
-  }
   .count {
     display: inline-block;
     min-width: 30px;
@@ -726,8 +711,7 @@ const styles = css`
       display: none;
     }
     .team,
-    .truncate,
-    .pic {
+    .truncate {
       min-width: 0;
       max-width: none;
       overflow: visible;
@@ -740,12 +724,8 @@ const styles = css`
       text-align: right;
       overflow-wrap: anywhere;
     }
-    .pic,
     td:not([data-label='Tim']) .truncate {
       text-align: right;
-    }
-    .pic {
-      align-items: flex-end;
     }
     /* Di mode kartu, tombol menu dipatok ke pojok kanan atas kartu; kalau
        dibiarkan mengalir ia jadi baris label/nilai sendiri di paling bawah. */
@@ -987,12 +967,6 @@ export class TeamTable extends BaseElement {
         </td>
         <td data-label="Unit Kerja">
           <span class="truncate" title="${esc(team.unit_kerja || '')}">${highlight(team.unit_kerja || '—', query)}</span>
-        </td>
-        <td data-label="PIC / Manager">
-          <span class="pic">
-            <span class="truncate" title="${esc(team.pic_name || '')}">${highlight(team.pic_name || '—', query)}</span>
-            ${team.pic?.nip ? `<span class="nip">${esc(team.pic.nip)}</span>` : ''}
-          </span>
         </td>
         <td class="right" data-label="Pemain"><span class="count">${num(team.member_count)}</span></td>
         <td class="right" data-label="Kunjungan">${

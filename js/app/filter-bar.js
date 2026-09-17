@@ -8,6 +8,7 @@ import { BaseElement, define } from '../core/element.js';
 import { css } from '../core/css.js';
 import { num } from '../core/format.js';
 import { activeFilterCount, filterTeams, resetFilters, setFilter, store } from '../data/app-state.js';
+import { bolehLihatNama, onAuth } from '../data/auth.js';
 import '../ui/ui-search.js';
 import '../ui/ui-combo.js';
 
@@ -99,7 +100,7 @@ export class FilterBar extends BaseElement {
     if (!this._built) {
       this.shadowRoot.innerHTML = `
         <div class="row">
-          <ui-search placeholder="Cari tim, kontingen, PIC, atau nama pemain…"></ui-search>
+          <ui-search></ui-search>
           <ui-combo id="kontingen" label="Filter kontingen" placeholder="Semua kontingen"></ui-combo>
           <button class="reset" type="button" hidden>Reset filter <b>0</b></button>
         </div>`;
@@ -116,6 +117,16 @@ export class FilterBar extends BaseElement {
 
     const search = this.$('ui-search');
     if (search.getAttribute('value') !== filters.q) search.setAttribute('value', filters.q);
+    // Petunjuk kolom cari mengikuti apa yang BENAR-BENAR dicari. Tanpa sesi,
+    // nama pemain dan PIC tidak ikut diindeks (lihat filterTeams), jadi
+    // menjanjikannya di placeholder hanya membuat orang mengetik nama lalu
+    // menyimpulkan datanya hilang.
+    const petunjuk = bolehLihatNama()
+      ? 'Cari tim, kontingen, PIC, atau nama pemain…'
+      : 'Cari tim, kontingen, atau unit kerja…';
+    if (search.getAttribute('placeholder') !== petunjuk) {
+      search.setAttribute('placeholder', petunjuk);
+    }
 
     const reset = this.$('.reset');
     reset.toggleAttribute('hidden', !count);
@@ -161,6 +172,8 @@ export class FilterBar extends BaseElement {
 
   onMount() {
     this.track(store.subscribe(() => this.requestRender()));
+    // Masuk/keluar mengubah apa yang bisa dicari, jadi petunjuknya ikut berubah.
+    this.track(onAuth(() => this.requestRender()));
 
     this.listen(this.shadowRoot, 'search', (e) => setFilter({ q: e.detail.value }));
     this.listen(this.shadowRoot, 'change', (e) => {

@@ -7,6 +7,10 @@ import { createStore } from '../core/store.js';
 import { compare, normalize } from '../core/format.js';
 import { summarize } from './source.js';
 import { timLengkap } from './rules.js';
+// Dipakai filterTeams() & matchedMembers(): pencarian tidak boleh menjangkau
+// nama pegawai untuk pengunjung yang belum masuk. auth.js tidak mengimpor
+// berkas ini, jadi tidak ada lingkaran impor.
+import { bolehLihatNama } from './auth.js';
 
 /*
  * Kolom tabel tim. `width` ditulis sebagai NILAI CSS YANG SAH untuk properti
@@ -38,9 +42,8 @@ import { timLengkap } from './rules.js';
 export const COLUMNS = [
   { key: 'index', label: '#', sortable: false, align: 'right', width: '46px' },
   { key: 'team_name', label: 'Tim', sortable: true, width: '22%' },
-  { key: 'kontingen', label: 'Kontingen', sortable: true, width: '16%' },
-  { key: 'unit_kerja', label: 'Unit Kerja', sortable: true, width: '15%' },
-  { key: 'pic_name', label: 'PIC / Manager', sortable: true, width: '13%' },
+  { key: 'kontingen', label: 'Kontingen', sortable: true, width: '21%' },
+  { key: 'unit_kerja', label: 'Unit Kerja', sortable: true, width: '23%' },
   { key: 'member_count', label: 'Pemain', sortable: true, align: 'right', width: '72px' },
   // Bersebelahan dengan "Pemain": keduanya kolom angka sempit, dan
   // mengelompokkannya membuat mata tidak melompati kolom teks di antaranya.
@@ -361,7 +364,12 @@ export function filterTeams(state = store.state) {
   return state.teams.filter((team) => {
     if (game && team.game !== game) return false;
     if (kontingen && team.kontingen !== kontingen) return false;
-    if (needle && !team._haystack.includes(needle)) return false;
+    // Indeks yang dipakai bergantung pada keadaan login: pengunjung yang belum
+    // masuk mencari di dalam _cariPublik, yang tidak memuat satu pun nama
+    // pegawai. Diperiksa di sini — saat mencari — dan bukan saat indeksnya
+    // dibangun, karena orang bisa masuk SETELAH data dimuat.
+    const jerami = bolehLihatNama() ? team._haystack : team._cariPublik;
+    if (needle && !jerami.includes(needle)) return false;
     return true;
   });
 }
@@ -425,6 +433,9 @@ export function sortTeams(rows, sort = store.state.sort) {
  * "kenapa tim ini muncul" saat pengguna mencari nama pemain.
  */
 export function matchedMembers(team, query) {
+  // Tanpa sesi, tidak ada nama pemain yang boleh muncul — termasuk sebagai
+  // alasan kenapa sebuah tim ikut tersaring.
+  if (!bolehLihatNama()) return [];
   const needle = normalize((query || '').trim());
   if (!needle || team._teamText.includes(needle)) return [];
   return team.members.filter((member) => member._haystack.includes(needle));
