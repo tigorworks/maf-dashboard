@@ -24,6 +24,7 @@ import { PICKER_TYPES, uploadTeamFile } from '../data/upload.js';
 import { catatKunjungan } from '../data/kunjungan.js';
 import {
   adalahAdmin, adalahRelawan, adalahTim, ambilIdCard, ambilKodeTim, bolehLihatIdCard,
+  bolehLihatNama,
   ambilJejak, bolehHapusTim, bolehSuntingTim, bolehUnggahTim, buatKodeTim, hapusTim,
   JENIS_KODE, namaJenis, onAuth, sesiSekarang, simpanRoster, UMUR_KODE,
 } from '../data/auth.js';
@@ -1451,6 +1452,84 @@ const styles = css`
     flex: 1;
   }
 
+  /* Rangka nama selagi "dimuat". Dua tahap — rangka dulu, lalu galat — karena
+     galat yang muncul serentak dengan halamannya tidak terbaca sebagai
+     kegagalan memuat, melainkan sebagai kolom yang memang begitu bentuknya. */
+  .nama-rangka {
+    display: inline-block;
+    width: 122px;
+    max-width: 100%;
+    height: 13px;
+    vertical-align: middle;
+    background: var(--skeleton);
+    background-size: 220% 100%;
+    border-radius: var(--r-xs);
+    animation: geser-rangka 1.15s var(--ease) infinite;
+  }
+  .pj-teks .nama-rangka {
+    width: 98px;
+  }
+  @keyframes geser-rangka {
+    0% {
+      background-position: 120% 0;
+    }
+    100% {
+      background-position: -120% 0;
+    }
+  }
+  /* Avatar ikut menunggu. Tanpa ini, monogram sudah tampil percaya diri di
+     sebelah rangka yang masih berkilau — dan dua tahap yang tidak sinkron itu
+     justru yang membuatnya terbaca sebagai dipasang, bukan sebagai gagal. */
+  .avatar.memuat,
+  .pj-ava.memuat {
+    color: transparent;
+    background: var(--surface-inset);
+    border: 1px solid var(--border);
+    animation: denyut 1.15s ease-in-out infinite;
+  }
+  /* Yang meminta gerakan dikurangi tetap mendapat kedua tahapnya, hanya diam. */
+  @media (prefers-reduced-motion: reduce) {
+    .nama-rangka,
+    .avatar.memuat,
+    .pj-ava.memuat {
+      animation: none;
+    }
+  }
+
+  /* Nama yang tidak dimuat untuk pengunjung tanpa sesi. Sengaja memakai nada
+     peringatan, bukan nada redup: yang redup terbaca sebagai "kosong", dan
+     kosong terbaca sebagai data yang memang tidak ada. */
+  .nama-galat {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--fs-md);
+    font-weight: 600;
+    color: var(--peringatan);
+  }
+  .nama-galat i {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 16px;
+    height: 16px;
+    font-size: 11px;
+    font-style: normal;
+    font-weight: 800;
+    color: var(--peringatan);
+    border: 1.5px solid color-mix(in srgb, var(--peringatan) 60%, transparent);
+    border-radius: var(--r-pill);
+  }
+  .pj-ava.galat,
+  .avatar.galat {
+    color: var(--peringatan);
+    background: color-mix(in srgb, var(--peringatan) 16%, transparent);
+    border: 1px dashed color-mix(in srgb, var(--peringatan) 45%, transparent);
+  }
+  .pj-teks .nama-galat {
+    font-size: var(--fs-md);
+  }
+
   /* Nama pemain memimpin kartu. Di layar verifikasi, yang dicari lebih dulu
      adalah "siapa orang ini", baru identitas in-game-nya. */
   .nama-pemain {
@@ -2427,6 +2506,40 @@ const IKON_CENTANG = `<svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
         stroke-linecap="round" stroke-linejoin="round" />
 </svg>`;
 
+/**
+ * Berapa lama rangka "sedang memuat" ditahan sebelum berganti jadi galat.
+ *
+ * Bukan angka rasa: di bawah ~400 ms kedipannya terbaca sebagai kerusakan
+ * render, dan di atas ~1,5 s orang sudah berpindah pandangan sebelum
+ * jawabannya datang. 850 ms jatuh di rentang yang sama dengan permintaan
+ * jaringan yang benar-benar gagal ke Apps Script.
+ */
+const TUNDA_GAGAL_NAMA = 850;
+
+/**
+ * Rangka nama yang sedang dimuat. Memakai --skeleton dari tokens.css — token
+ * itu sudah lama ada di sana dan belum dipakai siapa pun; inilah tempatnya.
+ *
+ * `.sr-only` WAJIB ikut: bagi pembaca layar, bidang yang hanya berisi kotak
+ * berkilau adalah bidang kosong, dan kosong terbaca sebagai "pemain ini tidak
+ * punya nama" — bukan "namanya sedang dimuat".
+ */
+const NAMA_RANGKA = `<span class="nama-rangka" aria-hidden="true"></span>
+  <span class="sr-only">Memuat nama…</span>`;
+
+/**
+ * Nama pegawai yang TIDAK ditampilkan untuk pengunjung yang belum masuk.
+ *
+ * Bentuknya dibuat menyerupai kolom yang GAGAL DIMUAT, bukan "disembunyikan":
+ * itu yang diminta. Konsekuensinya harus disadari — layar ini berbohong kepada
+ * pembacanya tentang penyebabnya, jadi jangan pernah memakai bentuk yang sama
+ * untuk kegagalan muat yang SUNGGUHAN, atau tidak akan ada yang bisa
+ * membedakan keduanya saat data benar-benar rusak.
+ */
+const NAMA_GALAT = `<span class="nama-galat" title="Nama tidak dapat dimuat">
+  <i aria-hidden="true">!</i><span>Gagal memuat</span>
+</span>`;
+
 /* Penanda "sedang berjalan". Berputar, BUKAN batang kemajuan: menyimpan roster
    adalah satu permintaan tunggal — batang yang merayap sendiri hanya mengarang
    kemajuan yang tidak diketahui siapa pun, termasuk oleh halaman ini. */
@@ -2564,6 +2677,41 @@ export class TeamDetail extends BaseElement {
     // tidak ikut disimpan — panitia memakainya untuk mencoba-coba susunan
     // sebelum mengumumkannya, dan mencoba-coba tidak boleh mengubah data.
     this._terpilih = new Set();
+    // Nama pegawai untuk pengunjung tanpa sesi: rangka dulu, lalu galat.
+    // false = masih "memuat". Disimpan di sini, BUKAN diserahkan ke animasi
+    // CSS: render() menulis ulang seluruh innerHTML, jadi animasi murni CSS
+    // akan memulai ulang tahap "memuat" setiap kali ada yang menekan kartu
+    // pemain — dan nama yang berkedip ulang tiap klik jelas bukan kegagalan
+    // memuat.
+    this._namaGagal = false;
+    this._timerNama = 0;
+  }
+
+  /**
+   * Mulai ulang tahapan rangka -> galat.
+   *
+   * Dipanggil saat panel dipasang, saat berpindah tim, dan saat sesi berubah —
+   * tiga saat di mana sebuah "pemuatan" memang wajar terjadi lagi. Sesi yang
+   * sah tidak butuh tahapan apa pun: namanya ada, langsung tampil.
+   */
+  _jadwalkanGagalNama() {
+    clearTimeout(this._timerNama);
+    this._namaGagal = false;
+    if (bolehLihatNama()) return;
+    this._timerNama = setTimeout(() => {
+      this._namaGagal = true;
+      this.requestRender();
+    }, TUNDA_GAGAL_NAMA);
+  }
+
+  /** Pengganti nama pegawai menurut tahapannya. Satu tempat untuk dua pemakai. */
+  _bentukNama() {
+    return this._namaGagal ? NAMA_GALAT : NAMA_RANGKA;
+  }
+
+  /** Kelas avatar yang menyertainya, supaya kedua tahap tetap sinkron. */
+  _kelasAvatar() {
+    return this._namaGagal ? ' galat' : ' memuat';
   }
 
   render() {
@@ -3062,11 +3210,16 @@ export class TeamDetail extends BaseElement {
     orang.forEach((o) => o.peran.sort((a, b) => bobot(a) - bobot(b)));
     orang.sort((a, b) => bobot(a.peran[0]) - bobot(b.peran[0]));
 
+    // PIC dan Manager juga pegawai, jadi nama mereka ikut aturan yang sama.
+    // Perannya TETAP ditampilkan: ia tidak menunjuk siapa pun.
+    const bolehNama = bolehLihatNama();
     const kartu = (nama, peran) => `
       <div class="pj-orang">
-        <span class="pj-ava" style="--hue:${hueOf(nama)}" aria-hidden="true">${esc(initials(nama))}</span>
+        <span class="pj-ava${bolehNama ? '' : this._kelasAvatar()}"
+              style="--hue:${hueOf(bolehNama ? nama : '')}"
+              aria-hidden="true">${bolehNama ? esc(initials(nama)) : this._namaGagal ? '?' : ''}</span>
         <span class="pj-teks">
-          ${esc(nama)}
+          ${bolehNama ? esc(nama) : this._bentukNama()}
           ${peran ? `<small>${esc(peran)}</small>` : ''}
         </span>
       </div>`;
@@ -3835,6 +3988,11 @@ export class TeamDetail extends BaseElement {
     // hanya dihitung di lencana tabel: yang memperbaikinya perlu tahu SIAPA.
     const hasilNick = periksaNick(nick, this._team?.game);
     const nickSalah = hasilNick.ok ? '' : hasilNick.pesan;
+    // Inisial avatar ikut disamarkan, bukan hanya namanya: "MR" dari "Muhammad
+    // Ravi Ali" masih menyempitkan pencarian ke sejumlah kecil orang, dan
+    // menyembunyikan nama sambil mencetak inisialnya adalah separuh langkah
+    // yang tidak menghasilkan apa pun.
+    const bolehNama = bolehLihatNama();
     const nama = member.full_name || nick || '—';
     const tone = STATUS_TONE[member.status] || 'var(--text-muted)';
     const pid = member.player_id || '';
@@ -3845,7 +4003,7 @@ export class TeamDetail extends BaseElement {
     const pratinjau = this._idcard?.[pid];
 
     return `
-      <li style="--hue:${hueOf(nick || nama)}" data-player="${esc(pid)}"
+      <li style="--hue:${hueOf(bolehNama ? nick || nama : nick || pid)}" data-player="${esc(pid)}"
           class="${pilih ? 'bisa-pilih' : ''}${dipilih ? ' terpilih' : ''}${
       terkunci ? ' penuh' : ''
     }"
@@ -3864,7 +4022,7 @@ export class TeamDetail extends BaseElement {
                      ? `title="Susunan sudah ${SUSUNAN_TOTAL} pemain — lepas salah satu dulu"`
                      : ''
                  }
-                 aria-label="Pilih ${esc(nama)} untuk susunan pemain"`
+                 aria-label="Pilih ${bolehNama ? esc(nama) : 'pemain slot ' + slot} untuk susunan pemain"`
               : ''
           }>
         <span class="slot">${slot}</span>
@@ -3875,9 +4033,11 @@ export class TeamDetail extends BaseElement {
               ? `<span class="pilih-kotak" aria-hidden="true">${dipilih ? IKON_CENTANG : ''}</span>`
               : ''
           }
-          <span class="avatar" aria-hidden="true">${esc(initials(nama))}</span>
+          <span class="avatar${bolehNama ? '' : this._kelasAvatar()}" aria-hidden="true">${
+            bolehNama ? esc(initials(nama)) : this._namaGagal ? '?' : ''
+          }</span>
           <span class="ident">
-            <span class="nama-pemain">${esc(nama)}</span>
+            <span class="nama-pemain">${bolehNama ? esc(nama) : this._bentukNama()}</span>
           </span>
         </div>
 
@@ -4314,6 +4474,12 @@ export class TeamDetail extends BaseElement {
    */
 
   onMount() {
+    this._jadwalkanGagalNama();
+    // Timer harus mati bersama komponennya: tanpa ini, panel yang ditutup
+    // sebelum 850 ms berlalu masih memanggil requestRender() pada elemen yang
+    // sudah dilepas.
+    this.track(() => clearTimeout(this._timerNama));
+
     // `immediate` WAJIB: komponen ini kini dibuat SETELAH tim dipilih, jadi
     // tanpa panggilan awal ia akan menunggu perubahan store yang mungkin tidak
     // pernah datang, dan halaman tampil kosong.
@@ -4354,6 +4520,9 @@ export class TeamDetail extends BaseElement {
           // dan kunci yang kebetulan sama (mis. "slot-1") akan tampil terpilih
           // di sana tanpa ada yang pernah menekannya.
           this._terpilih.clear();
+          // Tim baru = pemuatan baru. Tanpa ini, tim kedua langsung menampilkan
+          // galat tanpa pernah tampak mencoba memuat.
+          this._jadwalkanGagalNama();
           this._lepasPilihan();
         }
         // Mode ditentukan menu baris: "Unggah berkas" -> layar unggah,
@@ -4388,6 +4557,9 @@ export class TeamDetail extends BaseElement {
         // Keluar atau berganti peran mencabut alat susunan; pilihannya ikut
         // dibuang supaya masuk kembali tidak menghidupkan pilihan orang lain.
         if (!this._bolehPilih()) this._terpilih.clear();
+        // Keluar di tengah panel terbuka: nama yang tadinya tampil harus
+        // melewati tahapan yang sama, bukan berubah jadi galat seketika.
+        this._jadwalkanGagalNama();
         if (this._team) this.requestRender();
       })
     );

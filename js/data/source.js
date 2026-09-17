@@ -151,6 +151,19 @@ export function buildDataset(raw, endpoint = '') {
     team._teamText = normalize([team.team_name, team.kontingen, team.unit_kerja, team.pic_name].join(' '));
     team._haystack = `${team._teamText} ${members.map((m) => m._haystack).join(' ')}`;
 
+    // Indeks KETIGA, untuk pengunjung yang belum masuk: tanpa satu pun nama
+    // pegawai — bukan nama pemain, bukan nama PIC.
+    //
+    // Ini bukan kemewahan. Menyembunyikan nama di kartu tapi membiarkannya
+    // tetap bisa dicari berarti nama itu masih bisa DIKONFIRMASI: mengetik
+    // sebuah nama lalu melihat satu baris tim muncul sudah menjawab "orang ini
+    // ikut, di tim ini" — tepat hal yang diminta untuk tidak diekspos.
+    //
+    // Disiapkan di sini, bukan disaring saat mencari, karena keadaan login bisa
+    // berubah setelah data dimuat; yang berpindah nanti hanya indeks mana yang
+    // dipakai.
+    team._cariPublik = normalize([team.team_name, team.kontingen, team.unit_kerja].join(' '));
+
     teams.push(team);
     for (const member of members) players.push({ ...member, team });
   }

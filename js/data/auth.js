@@ -156,6 +156,30 @@ export function adalahRelawan() {
   return sesi?.peran === PERAN.RELAWAN;
 }
 
+/**
+ * Bolehkah layar menampilkan NAMA PEGAWAI — nama pemain, PIC, dan manager?
+ *
+ * Temuan CISO: dashboard publik tidak boleh mengekspos nama pegawai. Yang
+ * dijawab di sini hanya soal TAMPILAN, dan itu perlu dikatakan terus-terang:
+ *
+ *   Selama payload doGet masih MEMUAT nama-nama itu, menyembunyikannya di sini
+ *   tidak menutup temuan tersebut. Siapa pun yang membuka tab Network — atau
+ *   memanggil endpoint GET-nya langsung dengan curl — tetap menerima seluruh
+ *   nama. Penutup temuan yang sebenarnya ada di GAS: nama harus berhenti
+ *   dikirim di payload publik dan hanya keluar lewat rute ber-token.
+ *
+ * Jadi fungsi ini adalah separuh pekerjaan, dan sengaja ditulis sebagai
+ * separuh: ia menghapus paparan yang TIDAK SENGAJA (nama yang terbaca sambil
+ * lewat, terindeks mesin pencari, tertangkap tangkapan layar), bukan paparan
+ * bagi orang yang memang mencarinya.
+ *
+ * Sesi apa pun boleh melihat — admin, relawan, maupun PIC kontingen. Yang
+ * dibatasi adalah pengunjung yang belum masuk sama sekali.
+ */
+export function bolehLihatNama() {
+  return Boolean(sesi);
+}
+
 /** PIC kontingen: masuk dengan Kode Tim, wewenangnya sebatas kontingennya. */
 export function adalahTim() {
   return sesi?.peran === PERAN.TIM;
