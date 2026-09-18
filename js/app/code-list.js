@@ -17,7 +17,8 @@ import { css } from '../core/css.js';
 import { esc, jamMenit, normalize, normalKontingen, num, sisaWaktu } from '../core/format.js';
 import { caborTerkunci, setShowCodes, setTerkunci, store } from '../data/app-state.js';
 import {
-  ambilKodeTim, aturKunciRoster, buatKodeSemua, JENIS_KODE, namaJenis, resetKodeTim, UMUR_KODE,
+  ambilKodeRelawan, ambilKodeTim, aturKunciRoster, buatKodeRelawan, buatKodeSemua,
+  hapusKodeRelawan, JENIS_KODE, namaJenis, resetKodeTim, UMUR_KODE,
 } from '../data/auth.js';
 import { GAME_META } from '../data/source.js';
 
@@ -181,6 +182,30 @@ const styles = css`
   .pita-kunci.terkunci svg {
     color: var(--gold, var(--accent));
   }
+  /* Pita kode relawan. Bentuknya sama dengan pita kunci roster — keduanya
+     kendali admin yang berdiri di kepala halaman — tapi nadanya emas, bukan
+     merah: ia MEMBUKA akses, bukan menutupnya. */
+  .pita-kunci.relawan {
+    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+    background: color-mix(in srgb, var(--accent) 7%, transparent);
+  }
+  /* Kode ditulis mono dan diberi bidangnya sendiri: ia akan didiktekan lewat
+     telepon, dan huruf berjarak-sama adalah satu-satunya yang membuat
+     "REL-8K2M" tidak terbaca "REL-8KZM". */
+  .kode-relawan {
+    flex: none;
+    padding: 5px var(--sp-3);
+    font-family: var(--font-mono);
+    font-size: var(--fs-md);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--accent);
+    background: var(--surface-inset);
+    border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+    border-radius: var(--r-sm);
+    user-select: all;
+  }
+
   .pita-kunci.konfirmasi {
     background: color-mix(in srgb, var(--peringatan) 12%, transparent);
     border-bottom-color: color-mix(in srgb, var(--peringatan) 32%, transparent);
@@ -441,6 +466,11 @@ export class CodeList extends BaseElement {
     this._konfirmasiSemua = false;
     this._pitaSibukSemua = false;
     this._pesanAksi = '';
+    // Kode relawan: null = belum diminta, { kode, sampai, oleh } = sudah.
+    // Kode kosong berarti memang tidak ada yang aktif — bukan belum dibaca.
+    this._relawan = null;
+    this._relawanSibuk = false;
+    this._konfirmasiRelawan = false;
   }
 
   render() {
@@ -463,6 +493,8 @@ export class CodeList extends BaseElement {
                  value="${esc(this._cari)}" aria-label="Cari" />
         </header>
 
+        ${this._pitaRelawan()}
+
         ${this._pitaKunci(meta)}
 
         ${this._pesanAksi ? `<p class="nota sukses">${esc(this._pesanAksi)}</p>` : ''}
@@ -476,6 +508,121 @@ export class CodeList extends BaseElement {
           ${this._isi(baris)}
         </div>
       </section>`;
+  }
+
+  /**
+   * KODE RELAWAN — satu kode bersama untuk seluruh relawan verifikasi.
+   *
+   * Ditempatkan di halaman ini, di ATAS kode kontingen, karena keduanya benda
+   * sejenis: kode sementara yang dibuat admin lalu didiktekan ke orang. Yang
+   * membedakannya hanya siapa penerimanya, dan itu tertulis di pitanya.
+   *
+   * Kodenya ditampilkan UTUH, tidak disembunyikan di balik tombol mata seperti
+   * di detail tim: halaman ini sendiri hanya bisa dibuka admin, dan yang datang
+   * ke sini datang justru untuk membacanya.
+   */
+  _pitaRelawan() {
+    if (this._konfirmasiRelawan) {
+      const ada = Boolean(this._relawan?.kode);
+      return `
+        <div class="pita-kunci konfirmasi">
+          <span class="pita-teks">
+            <b>Buat kode relawan baru?</b>
+            ${
+              ada
+                ? 'Kode yang sekarang beredar langsung berhenti berlaku, dan ' +
+                  'relawan yang sedang masuk dengan kode itu ikut terputus. '
+                : ''
+            }Kode baru berlaku ${UMUR_KODE} sejak dibuat.
+          </span>
+          <button type="button" data-act="batal-relawan">Batal</button>
+          <button type="button" class="utama" data-act="ya-relawan" ${
+            this._relawanSibuk ? 'disabled' : ''
+          }>Buat kode relawan</button>
+        </div>`;
+    }
+
+    const kode = this._relawan?.kode || '';
+    const sisa = kode ? sisaWaktu(this._relawan.sampai) : '';
+
+    return `
+      <div class="pita-kunci relawan">
+        <span class="pita-teks">
+          <b>Kode relawan</b>
+          ${
+            kode
+              ? `Berlaku untuk seluruh relawan verifikasi — melihat data & ID card,
+                 tidak bisa mengubah apa pun.`
+              : `Belum ada kode aktif. Relawan tidak punya kunci tetap; buatkan kode
+                 sementara yang berlaku ${UMUR_KODE}.`
+          }
+        </span>
+        ${
+          kode
+            ? `<code class="kode-relawan">${esc(kode)}</code>
+               <span class="sisa ${sisa ? '' : 'habis'}">${esc(sisa || 'habis')}</span>
+               <button type="button" data-act="salin-relawan"
+                       data-salin="${esc(kode)}">${
+                 this._tersalin === kode ? 'Tersalin' : 'Salin'
+               }</button>
+               <button type="button" data-act="cabut-relawan" ${
+                 this._relawanSibuk ? 'disabled' : ''
+               }>Cabut</button>`
+            : ''
+        }
+        <button type="button" class="utama" data-act="minta-relawan" ${
+          this._relawanSibuk ? 'disabled' : ''
+        }>${this._relawanSibuk ? 'Memproses…' : kode ? 'Ganti kode' : 'Buat kode'}</button>
+      </div>`;
+  }
+
+  /** Baca kode relawan yang sedang berlaku. TIDAK membuat yang baru. */
+  async _muatRelawan() {
+    try {
+      this._relawan = await ambilKodeRelawan();
+    } catch (error) {
+      this._relawan = { kode: '', sampai: 0, oleh: '' };
+      this._galat = error.message || 'Gagal membaca kode relawan.';
+    }
+    this.render();
+  }
+
+  /** Terbitkan kode relawan baru, menggantikan yang lama. */
+  async _buatRelawan() {
+    if (this._relawanSibuk) return;
+    this._relawanSibuk = true;
+    this._konfirmasiRelawan = false;
+    this._pesanAksi = '';
+    this.render();
+    try {
+      this._relawan = await buatKodeRelawan();
+      this._galat = '';
+      this._pesanAksi = `Kode relawan dibuat, berlaku ${UMUR_KODE}. Bagikan ke relawan yang bertugas.`;
+    } catch (error) {
+      this._galat = error.message || 'Gagal membuat kode relawan.';
+    }
+    this._relawanSibuk = false;
+    this.render();
+  }
+
+  /** Cabut kode relawan beserta sesi yang sudah terbentuk darinya. */
+  async _cabutRelawan() {
+    if (this._relawanSibuk) return;
+    this._relawanSibuk = true;
+    this._pesanAksi = '';
+    this.render();
+    try {
+      const hasil = await hapusKodeRelawan();
+      this._relawan = { kode: '', sampai: 0, oleh: '' };
+      this._galat = '';
+      this._pesanAksi = hasil.sesiDicabut
+        ? `Kode relawan dicabut; ${hasil.sesiDicabut} sesi relawan ikut diputus.`
+        : 'Kode relawan dicabut.';
+    } catch (error) {
+      this._galat = error.message || 'Gagal mencabut kode relawan.';
+    }
+    this._relawanSibuk = false;
+    this.render();
   }
 
   /**
@@ -787,6 +934,30 @@ export class CodeList extends BaseElement {
         return;
       }
 
+      if (event.target.closest('[data-act="minta-relawan"]')) {
+        this._konfirmasiRelawan = true;
+        this.render();
+        return;
+      }
+      if (event.target.closest('[data-act="batal-relawan"]')) {
+        this._konfirmasiRelawan = false;
+        this.render();
+        return;
+      }
+      if (event.target.closest('[data-act="ya-relawan"]')) {
+        this._buatRelawan();
+        return;
+      }
+      if (event.target.closest('[data-act="cabut-relawan"]')) {
+        this._cabutRelawan();
+        return;
+      }
+      const salinRel = event.target.closest('[data-act="salin-relawan"]');
+      if (salinRel) {
+        this._salin(salinRel.dataset.salin, '');
+        return;
+      }
+
       if (event.target.closest('[data-act="minta-semua"]')) {
         this._konfirmasiSemua = true;
         this.render();
@@ -838,6 +1009,7 @@ export class CodeList extends BaseElement {
     });
 
     this._muat();
+    this._muatRelawan();
   }
 
   async _muat() {
