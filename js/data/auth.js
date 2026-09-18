@@ -442,6 +442,50 @@ export async function ambilKontak() {
   return hasil.kontak || [];
 }
 
+/* ------------------------------ kode relawan ------------------------------ */
+
+/**
+ * KODE RELAWAN — satu kode bersama, dibuat admin, berlaku 12 jam.
+ *
+ * Relawan tidak lagi punya kunci tetap di `CONFIG.PENGGUNA`. Alasannya sama
+ * dengan alasan Kode Tim berhenti permanen: kunci yang dibagikan ke beberapa
+ * orang lewat WhatsApp praktis tidak bisa ditarik kembali, dan mencabutnya
+ * menuntut deploy ulang. Kode berumur 12 jam menarik dirinya sendiri.
+ *
+ * Tiga fungsi, dan pemisahannya disengaja — lihat catatan di `kodeRelawan()`
+ * pada Code.gs: MEMBACA tidak boleh ikut membuat, atau sekadar membuka halaman
+ * admin akan mencabut kode yang sedang dipegang relawan di lapangan.
+ */
+
+/** Kode yang sedang berlaku (tanpa membuat yang baru). HANYA admin. */
+export async function ambilKodeRelawan() {
+  const hasil = await kirimTerautentikasi({ action: 'kodeRelawan' });
+  return {
+    kode: hasil.kode || '',
+    sampai: Number(hasil.sampai || 0),
+    oleh: hasil.oleh || '',
+  };
+}
+
+/** Buat kode relawan baru — MENGGANTI yang sebelumnya. HANYA admin. */
+export async function buatKodeRelawan() {
+  const hasil = await kirimTerautentikasi({ action: 'buatKodeRelawan' });
+  return {
+    kode: hasil.kode || '',
+    sampai: Number(hasil.sampai || 0),
+    oleh: hasil.oleh || '',
+  };
+}
+
+/**
+ * Cabut kode relawan, beserta sesi relawan yang sudah terbentuk darinya.
+ * HANYA admin. Mengembalikan berapa sesi yang ikut diputus.
+ */
+export async function hapusKodeRelawan() {
+  const hasil = await kirimTerautentikasi({ action: 'hapusKodeRelawan' });
+  return { dihapus: Boolean(hasil.dihapus), sesiDicabut: Number(hasil.sesiDicabut || 0) };
+}
+
 /**
  * Buang SELURUH Kode Tim yang sedang aktif. HANYA admin.
  * Dipakai saat panitia ingin menghentikan semua akses peserta sekaligus —

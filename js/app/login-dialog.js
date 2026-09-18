@@ -8,7 +8,7 @@
 import { BaseElement, define } from '../core/element.js';
 import { css } from '../core/css.js';
 import { esc } from '../core/format.js';
-import { masuk } from '../data/auth.js';
+import { masuk, UMUR_KODE } from '../data/auth.js';
 
 const styles = css`
   :host {
@@ -142,9 +142,9 @@ export class LoginDialog extends BaseElement {
         <p class="lead">Untuk panitia, relawan verifikasi, dan PIC tim.</p>
 
         <form>
-          <label for="kunci">Kunci akses atau Kode Tim</label>
+          <label for="kunci">Kunci akses, Kode Relawan, atau Kode Tim</label>
           <input id="kunci" name="kunci" type="password" autocomplete="off" spellcheck="false"
-                 placeholder="MAF-XXXX-… atau Kode Tim" maxlength="32" />
+                 placeholder="MAF-XXXX-… · REL-… · Kode Tim" maxlength="32" />
           <p class="pesan ${esc(this._pesanJenis)}" role="status" aria-live="polite">${esc(this._pesanTeks)}</p>
           <div class="aksi">
             <button type="button" data-act="batal">Batal</button>
@@ -155,10 +155,13 @@ export class LoginDialog extends BaseElement {
         </form>
 
         <p class="catatan">
-          PIC memakai <b>Kode Tim</b> dari panitia: masuk dengan kode itu membuka
-          pengubahan terbatas dan unggahan berkas untuk seluruh tim kontingennya.
-          Sesi berakhir sendiri setelah 3 jam tidak digunakan. Kunci dibagikan
-          panitia dan berlaku untuk satu orang — jangan diteruskan.
+          Relawan memakai <b>Kode Relawan</b> (berawalan <b>REL-</b>) dari panitia:
+          hanya melihat data dan ID card, tidak mengubah apa pun. PIC memakai
+          <b>Kode Tim</b>: masuk dengan kode itu membuka pengubahan terbatas dan
+          unggahan berkas untuk seluruh tim kontingennya. Kedua kode berlaku
+          ${UMUR_KODE} sejak dibuat, dan sesi berakhir sendiri setelah 3 jam tidak
+          digunakan. Kunci akses panitia berlaku untuk satu orang — jangan
+          diteruskan.
         </p>
       </section>`;
   }
@@ -228,7 +231,7 @@ export class LoginDialog extends BaseElement {
     } catch (error) {
       this._sibuk = false;
       this.render();
-      this._pesan(error.message || 'Kunci atau Kode Tim tidak dikenal.', 'galat');
+      this._pesan(error.message || 'Kunci atau kode tidak dikenal.', 'galat');
       const input = this.$('#kunci');
       input?.focus();
       input?.select();
