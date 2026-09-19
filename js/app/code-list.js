@@ -102,15 +102,25 @@ const styles = css`
   /* Peringatan ditempatkan sebelum datanya, bukan di kaki halaman: kalau
      dipasang setelah 64 baris, ia hanya terbaca oleh yang menggulir sampai
      bawah — padahal yang perlu diperingatkan justru yang langsung menyalin. */
+  /* Nota kini HANYA untuk hasil aksi, dan nada bawaannya netral.
+     Sebelumnya ia selalu berwarna peringatan — sehingga kalimat keterangan
+     biasa ("satu kode berlaku untuk seluruh tim…") tampil merah selebar layar
+     dan terbaca seperti galat. Warna peringatan disediakan lewat .galat, untuk
+     yang memang galat. */
   .nota {
     display: flex;
     align-items: center;
     gap: var(--sp-2);
     padding: var(--sp-3) var(--tepi);
     font-size: var(--fs-sm);
+    color: var(--text-muted);
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+  }
+  .nota.galat {
     color: var(--peringatan);
     background: color-mix(in srgb, var(--peringatan) 10%, transparent);
-    border-bottom: 1px solid color-mix(in srgb, var(--peringatan) 26%, transparent);
+    border-bottom-color: color-mix(in srgb, var(--peringatan) 26%, transparent);
   }
   .nota b {
     color: var(--text);
@@ -138,6 +148,12 @@ const styles = css`
     flex: none;
     width: 18px;
     height: 18px;
+    color: var(--text-faint);
+  }
+  .pita-teks small {
+    display: block;
+    margin-top: 2px;
+    font-size: var(--fs-xs);
     color: var(--text-faint);
   }
   .pita-teks {
@@ -185,18 +201,72 @@ const styles = css`
   /* Pita kode relawan. Bentuknya sama dengan pita kunci roster — keduanya
      kendali admin yang berdiri di kepala halaman — tapi nadanya emas, bukan
      merah: ia MEMBUKA akses, bukan menutupnya. */
-  .pita-kunci.relawan {
-    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-    background: color-mix(in srgb, var(--accent) 7%, transparent);
+  /* ---- KODE RELAWAN: zona utama halaman ini ----
+     Dibuat lebih tinggi dan lebih terang daripada pita di bawahnya karena
+     memang lebih sering dipakai: kode kontingen dibuat sekali di awal, kode
+     relawan diganti tiap giliran jaga. Pita yang sederajat membuat keduanya
+     harus dibaca dulu untuk dibedakan. */
+  .relawan {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+    padding: var(--sp-4) var(--tepi);
+    background: linear-gradient(90deg,
+      color-mix(in srgb, var(--accent) 12%, transparent), transparent 70%), var(--surface-2);
+    border-bottom: 1px solid color-mix(in srgb, var(--accent) 34%, transparent);
+  }
+  .relawan-isi {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    flex: 1;
+    min-width: 0;
+  }
+  .relawan-judul {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .relawan-baris {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    flex-wrap: wrap;
+  }
+  .relawan-ket {
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
+  }
+  .relawan.tanya .relawan-judul {
+    font-size: var(--fs-md);
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--text);
+  }
+  .relawan-aksi {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    flex: none;
+  }
+  /* Tombol utama zona ini sengaja lebih besar daripada tombol pita lain —
+     itu satu-satunya cara "yang paling sering dipakai" terbaca sebagai yang
+     paling penting tanpa menambah kotak, garis, atau warna baru. */
+  .relawan-aksi .besar {
+    height: 40px;
+    padding: 0 var(--sp-5);
+    font-size: var(--fs-md);
   }
   /* Kode ditulis mono dan diberi bidangnya sendiri: ia akan didiktekan lewat
      telepon, dan huruf berjarak-sama adalah satu-satunya yang membuat
      "REL-8K2M" tidak terbaca "REL-8KZM". */
   .kode-relawan {
     flex: none;
-    padding: 5px var(--sp-3);
+    padding: 4px var(--sp-3);
     font-family: var(--font-mono);
-    font-size: var(--fs-md);
+    font-size: var(--fs-xl);
     font-weight: 700;
     letter-spacing: 0.06em;
     color: var(--accent);
@@ -381,12 +451,23 @@ const styles = css`
     }
     .isi,
     .nota,
+    .relawan,
     .pita-kunci {
       padding-left: var(--sp-3);
       padding-right: var(--sp-3);
     }
+    .relawan,
     .pita-kunci {
       flex-wrap: wrap;
+    }
+    /* Di layar sempit tombolnya turun ke barisnya sendiri dan melebar penuh —
+       zona ini yang paling sering ditekan, jadi ia yang paling tidak boleh
+       jadi sasaran meleset. */
+    .relawan-aksi {
+      width: 100%;
+    }
+    .relawan-aksi .besar {
+      flex: 1;
     }
     /* Tabel jadi kartu: enam kolom tidak muat di 430 px tanpa memotong kode. */
     table,
@@ -499,11 +580,6 @@ export class CodeList extends BaseElement {
 
         ${this._pesanAksi ? `<p class="nota sukses">${esc(this._pesanAksi)}</p>` : ''}
 
-        <p class="nota">
-          Satu kode berlaku untuk <b>seluruh tim satu kontingen</b>, lintas cabor.
-          Kirimkan hanya ke PIC kontingen yang bersangkutan.
-        </p>
-
         <div class="isi">
           ${this._isi(baris)}
         </div>
@@ -522,58 +598,70 @@ export class CodeList extends BaseElement {
    * ke sini datang justru untuk membacanya.
    */
   _pitaRelawan() {
-    if (this._konfirmasiRelawan) {
-      const ada = Boolean(this._relawan?.kode);
-      return `
-        <div class="pita-kunci konfirmasi">
-          <span class="pita-teks">
-            <b>Buat kode relawan baru?</b>
-            ${
-              ada
-                ? 'Kode yang sekarang beredar langsung berhenti berlaku, dan ' +
-                  'relawan yang sedang masuk dengan kode itu ikut terputus. '
-                : ''
-            }Kode baru berlaku ${UMUR_KODE} sejak dibuat.
-          </span>
-          <button type="button" data-act="batal-relawan">Batal</button>
-          <button type="button" class="utama" data-act="ya-relawan" ${
-            this._relawanSibuk ? 'disabled' : ''
-          }>Buat kode relawan</button>
-        </div>`;
-    }
-
     const kode = this._relawan?.kode || '';
     const sisa = kode ? sisaWaktu(this._relawan.sampai) : '';
 
+    // Konfirmasi memakai WADAH YANG SAMA, bukan pita tambahan di atasnya.
+    // Menumpuk pita konfirmasi di atas pita aslinya persis yang membuat layar
+    // ini beranak-pinak sebelumnya.
+    if (this._konfirmasiRelawan) {
+      return `
+        <section class="relawan tanya">
+          <div class="relawan-isi">
+            <span class="relawan-judul">Buat kode relawan baru?</span>
+            <span class="relawan-ket">
+              ${
+                kode
+                  ? 'Kode yang sekarang beredar langsung berhenti berlaku, dan relawan ' +
+                    'yang sedang masuk ikut terputus.'
+                  : `Berlaku ${UMUR_KODE} sejak dibuat.`
+              }
+            </span>
+          </div>
+          <div class="relawan-aksi">
+            <button type="button" data-act="batal-relawan">Batal</button>
+            <button type="button" class="utama" data-act="ya-relawan" ${
+              this._relawanSibuk ? 'disabled' : ''
+            }>${this._relawanSibuk ? 'Membuat…' : 'Ya, buat'}</button>
+          </div>
+        </section>`;
+    }
+
     return `
-      <div class="pita-kunci relawan">
-        <span class="pita-teks">
-          <b>Kode relawan</b>
+      <section class="relawan">
+        <div class="relawan-isi">
+          <span class="relawan-judul">Kode relawan</span>
           ${
             kode
-              ? `Berlaku untuk seluruh relawan verifikasi — melihat data & ID card,
-                 tidak bisa mengubah apa pun.`
-              : `Belum ada kode aktif. Relawan tidak punya kunci tetap; buatkan kode
-                 sementara yang berlaku ${UMUR_KODE}.`
+              ? `<span class="relawan-baris">
+                   <code class="kode-relawan">${esc(kode)}</code>
+                   <span class="sisa ${sisa ? '' : 'habis'}">${esc(sisa || 'habis')}</span>
+                 </span>
+                 <span class="relawan-ket">
+                   Untuk relawan verifikasi — melihat data & ID card, tidak mengubah apa pun.
+                 </span>`
+              : `<span class="relawan-ket">
+                   Relawan tidak punya kunci tetap. Buatkan kode sementara yang
+                   berlaku ${UMUR_KODE}.
+                 </span>`
           }
-        </span>
-        ${
-          kode
-            ? `<code class="kode-relawan">${esc(kode)}</code>
-               <span class="sisa ${sisa ? '' : 'habis'}">${esc(sisa || 'habis')}</span>
-               <button type="button" data-act="salin-relawan"
-                       data-salin="${esc(kode)}">${
-                 this._tersalin === kode ? 'Tersalin' : 'Salin'
-               }</button>
-               <button type="button" data-act="cabut-relawan" ${
-                 this._relawanSibuk ? 'disabled' : ''
-               }>Cabut</button>`
-            : ''
-        }
-        <button type="button" class="utama" data-act="minta-relawan" ${
-          this._relawanSibuk ? 'disabled' : ''
-        }>${this._relawanSibuk ? 'Memproses…' : kode ? 'Ganti kode' : 'Buat kode'}</button>
-      </div>`;
+        </div>
+        <div class="relawan-aksi">
+          ${
+            kode
+              ? `<button type="button" data-act="salin-relawan" data-salin="${esc(kode)}">${
+                  this._tersalin === kode ? 'Tersalin' : 'Salin'
+                }</button>
+                 <button type="button" data-act="cabut-relawan" ${
+                   this._relawanSibuk ? 'disabled' : ''
+                 }>Cabut</button>`
+              : ''
+          }
+          <button type="button" class="utama besar" data-act="minta-relawan" ${
+            this._relawanSibuk ? 'disabled' : ''
+          }>${this._relawanSibuk ? 'Memproses…' : kode ? 'Ganti kode' : 'Buat kode relawan'}</button>
+        </div>
+      </section>`;
   }
 
   /** Baca kode relawan yang sedang berlaku. TIDAK membuat yang baru. */
@@ -668,6 +756,13 @@ export class CodeList extends BaseElement {
               ? `Kode Tim tidak berlaku lagi${info.oleh ? ` · dikunci oleh ${esc(info.oleh)}` : ''}.`
               : 'PIC masih bisa mengunggah berkas dengan Kode Tim.'
           }
+          ${/* Dulu kalimat ini berdiri sebagai pita MERAH selebar layar di bawah
+               sini — keterangan biasa yang memakai warna peringatan, jadi ia
+               terbaca seperti galat dan menambah satu lapis lagi. Tempatnya
+               memang di sini: ia menerangkan kode yang dibuat tombol di
+               sebelahnya. */ ''}
+          <small>Satu kode berlaku untuk seluruh tim satu kontingen, lintas cabor —
+          kirimkan hanya ke PIC yang bersangkutan.</small>
         </span>
         <button type="button" data-act="minta-kunci">${terkunci ? 'Buka kunci' : 'Kunci roster'}</button>
         ${
