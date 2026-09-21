@@ -218,6 +218,43 @@ export function kembaliKeDaftar() {
   });
 }
 
+/**
+ * Tempelkan nama pegawai yang datang dari rute ber-token ke data yang sudah
+ * ada, tanpa memuat ulang apa pun.
+ *
+ * Nama tidak ikut payload publik, jadi tim & pemain lahir tanpa nama dan baru
+ * mendapatkannya di sini. Indeks pencarian ikut dibangun ulang: tanpa itu,
+ * mencari nama pemain tetap nihil walaupun namanya sudah tampil di layar.
+ *
+ * `peta` kosong (mis. setelah keluar) MENGHAPUS nama yang sudah tertempel —
+ * bukan membiarkannya. Sesi yang berakhir tidak boleh meninggalkan nama di
+ * memori halaman yang masih terbuka.
+ */
+export function setNama(peta) {
+  const isi = peta && typeof peta === 'object' ? peta : {};
+  const teams = (store.state.teams || []).map((team) => {
+    const n = isi[team.team_id];
+    const members = team.members.map((m) => {
+      const nama = n?.pemain?.[m.player_id] || '';
+      const orang = { ...m, full_name: nama };
+      orang._haystack = normalize([nama, orang.game_nick, orang.game_id].join(' '));
+      return orang;
+    });
+    const kontak = (team.contacts || []).map((c, i) => ({ ...c, name: n?.kontak?.[i] || '' }));
+    const pic = { ...(team.pic || {}), name: n?.pic || '' };
+    const baru = { ...team, members, contacts: kontak, pic, pic_name: pic.name };
+    baru._teamText = normalize(
+      [baru.team_name, baru.kontingen, baru.unit_kerja, baru.pic_name].join(' ')
+    );
+    baru._haystack = `${baru._teamText} ${members.map((m) => m._haystack).join(' ')}`;
+    return baru;
+  });
+
+  const players = [];
+  teams.forEach((team) => team.members.forEach((m) => players.push({ ...m, team })));
+  store.set({ teams, players });
+}
+
 export function setAuth(sesi) {
   // kontingen ikut disimpan supaya komponen yang membaca store (bukan modul
   // auth) tahu tim mana yang boleh disunting oleh sesi peran 'tim'.
@@ -368,7 +405,7 @@ export function filterTeams(state = store.state) {
     // masuk mencari di dalam _cariPublik, yang tidak memuat satu pun nama
     // pegawai. Diperiksa di sini — saat mencari — dan bukan saat indeksnya
     // dibangun, karena orang bisa masuk SETELAH data dimuat.
-    const jerami = bolehLihatNama() ? team._haystack : team._cariPublik;
+    const jerami = bolehLihatNama(team) ? team._haystack : team._cariPublik;
     if (needle && !jerami.includes(needle)) return false;
     return true;
   });
@@ -434,8 +471,9 @@ export function sortTeams(rows, sort = store.state.sort) {
  */
 export function matchedMembers(team, query) {
   // Tanpa sesi, tidak ada nama pemain yang boleh muncul — termasuk sebagai
-  // alasan kenapa sebuah tim ikut tersaring.
-  if (!bolehLihatNama()) return [];
+  // alasan kenapa sebuah tim ikut tersaring. Timnya ikut ditanyakan: peran
+  // `tim` hanya berhak atas kontingennya sendiri.
+  if (!bolehLihatNama(team)) return [];
   const needle = normalize((query || '').trim());
   if (!needle || team._teamText.includes(needle)) return [];
   return team.members.filter((member) => member._haystack.includes(needle));

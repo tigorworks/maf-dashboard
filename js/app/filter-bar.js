@@ -121,6 +121,9 @@ export class FilterBar extends BaseElement {
     // nama pemain dan PIC tidak ikut diindeks (lihat filterTeams), jadi
     // menjanjikannya di placeholder hanya membuat orang mengetik nama lalu
     // menyimpulkan datanya hilang.
+    // Tanpa argumen tim: yang ditanyakan "apakah sesi ini melihat nama sama
+    // sekali", bukan tim tertentu. PIC kontingen memang bisa mencari nama —
+    // hanya saja nama tim lain tidak pernah sampai ke browsernya.
     const petunjuk = bolehLihatNama()
       ? 'Cari tim, kontingen, PIC, atau nama pemain…'
       : 'Cari tim, kontingen, atau unit kerja…';

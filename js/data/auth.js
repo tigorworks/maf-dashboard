@@ -157,27 +157,26 @@ export function adalahRelawan() {
 }
 
 /**
- * Bolehkah layar menampilkan NAMA PEGAWAI — nama pemain, PIC, dan manager?
+ * Bolehkah layar menampilkan NAMA PEGAWAI untuk tim ini?
  *
- * Temuan CISO: dashboard publik tidak boleh mengekspos nama pegawai. Yang
- * dijawab di sini hanya soal TAMPILAN, dan itu perlu dikatakan terus-terang:
+ *   tanpa sesi     : tidak
+ *   admin, relawan : seluruh tim
+ *   tim (Kode Tim) : HANYA tim di kontingennya sendiri
  *
- *   Selama payload doGet masih MEMUAT nama-nama itu, menyembunyikannya di sini
- *   tidak menutup temuan tersebut. Siapa pun yang membuka tab Network — atau
- *   memanggil endpoint GET-nya langsung dengan curl — tetap menerima seluruh
- *   nama. Penutup temuan yang sebenarnya ada di GAS: nama harus berhenti
- *   dikirim di payload publik dan hanya keluar lewat rute ber-token.
+ * Sejak 21 Sep 2026 ini BUKAN lagi sekadar soal tampilan. Nama sudah berhenti
+ * dikirim di payload publik; ia datang lewat rute ber-token `nama` yang
+ * menyaring dengan aturan yang sama persis di sisi GAS. Jadi fungsi ini hanya
+ * memutuskan apa yang digambar — kalau seseorang memaksanya lewat DevTools,
+ * yang didapat bukan nama, melainkan bidang kosong: datanya memang tidak
+ * pernah sampai ke browser-nya.
  *
- * Jadi fungsi ini adalah separuh pekerjaan, dan sengaja ditulis sebagai
- * separuh: ia menghapus paparan yang TIDAK SENGAJA (nama yang terbaca sambil
- * lewat, terindeks mesin pencari, tertangkap tangkapan layar), bukan paparan
- * bagi orang yang memang mencarinya.
- *
- * Sesi apa pun boleh melihat — admin, relawan, maupun PIC kontingen. Yang
- * dibatasi adalah pengunjung yang belum masuk sama sekali.
+ * `team` boleh dikosongkan untuk pertanyaan umum "apakah sesi ini melihat nama
+ * sama sekali" — dipakai mis. oleh petunjuk kolom pencarian.
  */
-export function bolehLihatNama() {
-  return Boolean(sesi);
+export function bolehLihatNama(team) {
+  if (!sesi) return false;
+  if (!adalahTim()) return true;
+  return team ? kontingenSendiri(team) : true;
 }
 
 /** PIC kontingen: masuk dengan Kode Tim, wewenangnya sebatas kontingennya. */
@@ -440,6 +439,20 @@ export async function aturKunciRoster(game, kunci) {
 export async function ambilKontak() {
   const hasil = await kirimTerautentikasi({ action: 'kontak' });
   return hasil.kontak || [];
+}
+
+/**
+ * Nama pegawai untuk tim yang boleh dilihat sesi ini.
+ *
+ * Satu permintaan untuk seluruh tim yang berhak, bukan satu per tim: nama
+ * dipakai di daftar tim, pencarian, dan panel tim sekaligus, dan memintanya
+ * per tim berarti puluhan permintaan GAS hanya untuk menggambar satu tabel.
+ *
+ * Bentuknya { teamId: { pic, kontak[], pemain{ playerId: nama } } }.
+ */
+export async function ambilNama() {
+  const hasil = await kirimTerautentikasi({ action: 'nama' });
+  return { nama: hasil.nama || {}, lingkup: hasil.lingkup || '' };
 }
 
 /* ------------------------------ kode relawan ------------------------------ */
