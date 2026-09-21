@@ -364,7 +364,7 @@ export class AppHeader extends BaseElement {
 
         ${
           caborTerkunci()
-            ? `<span class="terkunci-chip" title="Roster cabor ini dikunci — Kode Tim tidak berlaku">
+            ? `<span class="terkunci-chip" title="Roster cabor ini dikunci — logo &amp; ID card tidak bisa lagi dikirim peserta; foto tetap bisa">
                  <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
                    <rect x="3" y="7" width="10" height="7" rx="1.8" stroke="currentColor" stroke-width="1.5" />
                    <path d="M5.4 7V5.2a2.6 2.6 0 0 1 5.2 0V7" stroke="currentColor" stroke-width="1.5" />

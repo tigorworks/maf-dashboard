@@ -2780,7 +2780,10 @@ export class TeamDetail extends BaseElement {
     const bolehUnggah = bolehUnggahTim(team);
     const unggah = this._mode === 'berkas' && bolehUnggah;
     const foto = this._mode === 'foto' && bolehUnggah;
-    const bolehUnggahSekarang = this._bolehTawarkanUnggah(team);
+    const bolehLayarBerkas = this._bolehTawarkanUnggah(team, 'berkas');
+    const bolehLayarFoto = this._bolehTawarkanUnggah(team, 'foto');
+    // Barisan tombol pindah-layar tampil kalau SALAH SATU-nya terbuka.
+    const bolehUnggahSekarang = bolehLayarBerkas || bolehLayarFoto;
     // Berkas yang sudah dipilih tapi belum terkirim. Angkanya dipakai bilah
     // simpan di mode ubah, supaya satu tombol Simpan mengurus keduanya.
     const antreBerkas = Object.keys(this._pilihan).length;
@@ -2892,14 +2895,14 @@ export class TeamDetail extends BaseElement {
                      <span> label disembunyikan dengan display:none, dan itu
                      ikut menghapusnya dari pohon aksesibilitas — tombolnya
                      jadi tanpa nama sama sekali bagi pembaca layar. */
-                  unggah
+                  unggah || !bolehLayarBerkas
                     ? ''
                     : `<button class="aksi-layar" type="button" data-act="ke-berkas"
                                title="Unggah logo &amp; ID card" aria-label="Unggah logo dan ID card">
                          ${IKON_UNGGAH}<span>Unggah berkas</span>
                        </button>`
                 }${
-                  foto
+                  foto || !bolehLayarFoto
                     ? ''
                     : `<button class="aksi-layar" type="button" data-act="ke-foto"
                                title="Unggah foto tim &amp; pemain" aria-label="Unggah foto tim dan pemain">
@@ -3074,8 +3077,8 @@ export class TeamDetail extends BaseElement {
         <b>Roster cabor ini sudah dikunci panitia.</b>
         ${
           admin
-            ? 'Kode Tim tidak berlaku lagi — tapi Anda masuk sebagai admin, jadi unggahan tetap bisa dilakukan.'
-            : 'Kode Tim tidak berlaku lagi. Hubungi panitia bila masih ada berkas yang perlu dikirim.'
+            ? 'Logo &amp; ID card tidak bisa lagi dikirim peserta — tapi Anda masuk sebagai admin, jadi unggahan tetap bisa dilakukan.'
+            : 'Logo dan ID card tidak bisa lagi dikirim. <b>Foto masih bisa</b> — kunci roster tidak menutupnya. Hubungi panitia bila ada berkas lain yang perlu dikirim.'
         }
       </p>`;
   }
@@ -3265,7 +3268,8 @@ export class TeamDetail extends BaseElement {
    */
   _bagianFoto(team, members, admin, timSendiri = false) {
     const sudah = members.filter((m) => m.has_foto).length;
-    const mati = !admin && caborTerkunci(team.game);
+    // TIDAK ikut kunci roster. Beda dari _bagianUnggah, yang memang dimatikan.
+    const mati = false;
     const kunciFotoTim = this._kunciPilihan('foto', team.team_id);
     return `
       <section class="berkas">
@@ -4644,7 +4648,7 @@ export class TeamDetail extends BaseElement {
         ];
         // Kembali ke verifikasi selalu boleh — yang dijaga hanya jalan MASUK
         // ke layar unggah.
-        if (tujuan && !this._bolehTawarkanUnggah(tim)) return;
+        if (tujuan && !this._bolehTawarkanUnggah(tim, tujuan)) return;
         selectTeam(tim.team_id, tujuan);
         return;
       }
@@ -5096,9 +5100,14 @@ export class TeamDetail extends BaseElement {
    * penangan klik memutuskan perpindahannya boleh terjadi. Dua salinan aturan
    * yang sama adalah dua kesempatan untuk berbeda.
    */
-  _bolehTawarkanUnggah(team) {
+  _bolehTawarkanUnggah(team, layar = 'berkas') {
     if (!team) return false;
     if (!bolehUnggahTim(team)) return false;
+    // Foto tidak ikut terkunci — lihat alasannya di unggahBerkas() pada
+    // Code.gs: kunci roster menutup berkas yang menentukan KEABSAHAN peserta
+    // (logo & ID card), sedangkan foto justru paling sering baru terkumpul
+    // sesudah roster dikunci.
+    if (layar === 'foto') return true;
     return adalahAdmin() || !caborTerkunci(team.game);
   }
 
@@ -5173,10 +5182,11 @@ export class TeamDetail extends BaseElement {
    * berkas lalu ditolak karena kode kosong memaksa mengulang pemilihan.
    */
   _pilihBerkas(kind, playerId = null) {
-    // Roster terkunci: Kode Tim berhenti berlaku. Ditahan di sini supaya tidak
-    // ada berkas yang dikompres dan dikirim hanya untuk ditolak GAS.
-    if (!adalahAdmin() && caborTerkunci(this._team?.game)) {
-      this._pesan('Roster cabor ini sudah dikunci panitia — Kode Tim tidak berlaku lagi.', 'galat');
+    // Roster terkunci: Kode Tim berhenti berlaku untuk logo & ID card. Ditahan
+    // di sini supaya tidak ada berkas yang dikompres dan dikirim hanya untuk
+    // ditolak GAS. Foto dikecualikan — aturannya sama dengan di Code.gs.
+    if (kind !== 'foto' && !adalahAdmin() && caborTerkunci(this._team?.game)) {
+      this._pesan('Roster cabor ini sudah dikunci panitia — logo & ID card tidak bisa lagi dikirim. Foto masih bisa.', 'galat');
       return;
     }
 
