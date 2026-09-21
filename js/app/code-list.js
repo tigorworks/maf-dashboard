@@ -735,8 +735,8 @@ export class CodeList extends BaseElement {
             <b>${terkunci ? 'Buka kunci' : 'Kunci'} roster ${esc(meta.label)}?</b>
             ${
               terkunci
-                ? 'PIC bisa kembali mengunggah berkas dengan Kode Tim.'
-                : `Seluruh ${num(this._data?.length || 0)} kode berhenti berlaku. Admin tetap bisa mengunggah.`
+                ? 'PIC bisa kembali mengunggah logo & ID card dengan Kode Tim.'
+                : `Seluruh ${num(this._data?.length || 0)} kode berhenti berlaku untuk logo & ID card — foto tetap bisa dikirim. Admin tidak terpengaruh.`
             }
           </span>
           <button type="button" data-act="batal-kunci">Batal</button>
@@ -753,8 +753,8 @@ export class CodeList extends BaseElement {
           <b>${terkunci ? `Roster ${esc(meta.label)} terkunci` : `Roster ${esc(meta.label)} terbuka`}</b>
           ${
             terkunci
-              ? `Kode Tim tidak berlaku lagi${info.oleh ? ` · dikunci oleh ${esc(info.oleh)}` : ''}.`
-              : 'PIC masih bisa mengunggah berkas dengan Kode Tim.'
+              ? `Logo & ID card terkunci; foto tetap bisa dikirim${info.oleh ? ` · dikunci oleh ${esc(info.oleh)}` : ''}.`
+              : 'PIC masih bisa mengunggah semua berkas dengan Kode Tim.'
           }
           ${/* Dulu kalimat ini berdiri sebagai pita MERAH selebar layar di bawah
                sini — keterangan biasa yang memakai warna peringatan, jadi ia
