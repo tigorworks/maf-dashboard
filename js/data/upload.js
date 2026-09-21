@@ -18,8 +18,21 @@ const QUALITY = 0.85;
  * Jenis berkas yang diterima GAS. Harus sama dengan CONFIG.ALLOWED_MIME.
  *
  * Ini soal apa yang DIKIRIM, bukan apa yang boleh dipilih peserta — lihat
- * PICKER_TYPES di bawah. Gambar selalu di-encode ulang jadi WebP/JPEG sebelum
- * dikirim, jadi format aslinya tidak pernah sampai ke GAS.
+ * PICKER_TYPES di bawah.
+ *
+ * Yang dikirim berbeda menurut JENISNYA, dan bedanya penting:
+ *
+ *   logo, idcard : selalu di-encode ulang — WebP, jatuh ke JPEG kalau peramban
+ *                  tidak mendukungnya. Keduanya hanya perlu terbaca di layar.
+ *   foto         : TIDAK PERNAH dikonversi ke WebP. Formatnya dipertahankan
+ *                  apa adanya bila sudah diterima GAS; hanya yang tidak
+ *                  diterima (mis. HEIC) di-encode, dan itu pun ke JPEG
+ *                  resolusi penuh. Foto dipakai untuk bahan cetak dan desain.
+ *
+ * Kalimat lama di sini berbunyi "gambar SELALU di-encode ulang jadi
+ * WebP/JPEG", dan itu sudah tidak benar sejak foto dipertahankan seaslinya.
+ * Dibetulkan karena komentar yang salah di tempat ini akan menuntun orang
+ * berikutnya mengembalikan konversi yang sengaja dibuang — lihat siapkanFoto().
  */
 export const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
@@ -28,7 +41,7 @@ export const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
  *
  * Semua format gambar populer disebut di sini, bukan hanya yang diterima GAS,
  * karena dua hal berbeda: apa yang boleh DIPILIH orang, dan apa yang DIKIRIM.
- * Yang dikirim selalu WebP/JPEG hasil encode ulang, apa pun yang dipilih.
+ * Yang dikirim bergantung jenis berkasnya — lihat ACCEPTED_TYPES di atas.
  *
  * Format yang tidak disebut di sini tampil KELABU dan tidak bisa dipilih di
  * kotak berkas — dukungan yang tidak pernah terjangkau. Karena itu daftarnya
@@ -242,6 +255,11 @@ function muatGambar(url) {
 
 /**
  * Siapkan FOTO: pertahankan berkas aslinya.
+ *
+ * ATURAN YANG TIDAK BOLEH DILANGGAR: foto TIDAK PERNAH dikonversi ke WebP.
+ * Tidak di jalur mana pun di bawah ini. WebP mengubah piksel dan foto tim
+ * dipakai untuk bahan cetak — kerugiannya tidak bisa ditarik kembali setelah
+ * aslinya ada di tangan peserta saja. Dijaga oleh uji-foto-asli/uji-foto-webp.
  *
  * Tiga jalur, berurutan:
  *

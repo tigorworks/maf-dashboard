@@ -8,10 +8,10 @@ import { esc } from '../core/format.js';
 import { loadDataset } from '../data/source.js';
 import { ambilSemuaKunjungan } from '../data/kunjungan.js';
 import {
-  derive, kembaliKeDaftar, setAuth, setDataset, setError, setKunjungan, setPage, store,
+  derive, kembaliKeDaftar, setAuth, setDataset, setError, setKunjungan, setNama, setPage, store,
 } from '../data/app-state.js';
 import { initGameRouting } from '../data/router.js';
-import { adalahAdmin, onAuth, pulihkanSesi } from '../data/auth.js';
+import { adalahAdmin, ambilNama, onAuth, pulihkanSesi } from '../data/auth.js';
 import './app-header.js';
 import './login-dialog.js';
 import './code-list.js';
@@ -499,6 +499,33 @@ export class AppShell extends BaseElement {
     this._memuatUlang = false;
   }
 
+  /**
+   * Ambil nama pegawai untuk sesi ini, lalu tempelkan ke store.
+   *
+   * Gagalnya TIDAK menjatuhkan halaman: data tim sudah ada dan tetap berguna
+   * tanpa nama. Yang terjadi hanya nama tetap kosong — bentuk yang sudah
+   * ditangani layar (rangka lalu "Gagal memuat"), jadi tidak ada keadaan baru
+   * yang perlu digambar.
+   *
+   * `_namaUntuk` menahan jawaban yang datang terlambat: masuk lalu cepat
+   * keluar membuat jawaban sesi lama tiba setelah sesinya tidak ada lagi, dan
+   * tanpa penjaga ini nama itu ditempelkan ke halaman yang sudah tidak berhak.
+   */
+  async _muatNama(sesi) {
+    const penanda = sesi?.token || '';
+    this._namaUntuk = penanda;
+    if (!sesi) {
+      setNama({});
+      return;
+    }
+    try {
+      const { nama } = await ambilNama();
+      if (this._namaUntuk === penanda) setNama(nama);
+    } catch (error) {
+      if (this._namaUntuk === penanda) setNama({});
+    }
+  }
+
   async onMount() {
     this.track(store.subscribe(() => this.requestRender()));
     // Dipasang sebelum data dimuat supaya perubahan cabor apa pun tercermin di
@@ -532,6 +559,10 @@ export class AppShell extends BaseElement {
         setAuth(sesi);
         if (adaSesi && !sesi) kembaliKeDaftar();
         adaSesi = Boolean(sesi);
+        // Nama pegawai tidak ikut payload publik; ia diambil di sini, sekali
+        // tiap perubahan sesi. Keluar -> dikosongkan, supaya nama tidak
+        // tertinggal di halaman yang masih terbuka.
+        this._muatNama(sesi);
       })
     );
     this.listen(this.shadowRoot, 'minta-masuk', () => this.$('login-dialog')?.buka());

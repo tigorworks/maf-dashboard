@@ -2697,7 +2697,7 @@ export class TeamDetail extends BaseElement {
   _jadwalkanGagalNama() {
     clearTimeout(this._timerNama);
     this._namaGagal = false;
-    if (bolehLihatNama()) return;
+    if (bolehLihatNama(this._team)) return;
     this._timerNama = setTimeout(() => {
       this._namaGagal = true;
       this.requestRender();
@@ -3192,11 +3192,21 @@ export class TeamDetail extends BaseElement {
    * Karena itu kontak digabung per orang dan perannya dikumpulkan jadi satu.
    */
   _pitaPic(team, pic) {
+    // PIC dan Manager juga pegawai, jadi nama mereka ikut aturan yang sama
+    // dengan nama pemain. Perannya TETAP ditampilkan: peran tidak menunjuk
+    // siapa pun.
+    const bolehNama = bolehLihatNama(team);
+
     const orang = [];
-    (team.contacts || []).forEach((c) => {
+    (team.contacts || []).forEach((c, i) => {
       const nama = (c.name || '').trim();
-      if (!nama) return;
-      const kunci = nama.toLowerCase();
+      // Tanpa hak lihat nama, `name` memang kosong — GAS tidak mengirimkannya.
+      // Melewati baris kosong di sini akan membuat daftarnya HILANG dan pita
+      // ini berkata "Tidak diisi saat pendaftaran", padahal kontaknya ada:
+      // yang tidak ada hanya namanya. Jumlah dan perannya tetap datang di
+      // payload publik justru supaya kerangkanya bisa digambar apa adanya.
+      if (!nama && bolehNama) return;
+      const kunci = nama ? nama.toLowerCase() : `#${i}`;
       const ada = orang.find((o) => o.kunci === kunci);
       const peran = (c.role || 'PIC').trim();
       if (ada) {
@@ -3210,9 +3220,6 @@ export class TeamDetail extends BaseElement {
     orang.forEach((o) => o.peran.sort((a, b) => bobot(a) - bobot(b)));
     orang.sort((a, b) => bobot(a.peran[0]) - bobot(b.peran[0]));
 
-    // PIC dan Manager juga pegawai, jadi nama mereka ikut aturan yang sama.
-    // Perannya TETAP ditampilkan: ia tidak menunjuk siapa pun.
-    const bolehNama = bolehLihatNama();
     const kartu = (nama, peran) => `
       <div class="pj-orang">
         <span class="pj-ava${bolehNama ? '' : this._kelasAvatar()}"
@@ -3228,7 +3235,14 @@ export class TeamDetail extends BaseElement {
       <section class="pj">
         <div class="pj-grup">
           <h3>Penanggung jawab kontingen</h3>
-          ${pic.name ? kartu(pic.name, '') : '<p class="pj-kosong">Tidak tercatat</p>'}
+          ${
+            /* Sama seperti daftar di sebelahnya: tanpa hak lihat nama, `pic.name`
+               kosong karena memang tidak dikirim — dan "Tidak tercatat" akan
+               menyatakan sesuatu yang tidak diketahui halaman ini. */
+            pic.name || !bolehNama
+              ? kartu(pic.name || '', '')
+              : '<p class="pj-kosong">Tidak tercatat</p>'
+          }
         </div>
         <div class="pj-grup">
           <h3>PIC / Manager tim</h3>
@@ -3992,7 +4006,7 @@ export class TeamDetail extends BaseElement {
     // Ravi Ali" masih menyempitkan pencarian ke sejumlah kecil orang, dan
     // menyembunyikan nama sambil mencetak inisialnya adalah separuh langkah
     // yang tidak menghasilkan apa pun.
-    const bolehNama = bolehLihatNama();
+    const bolehNama = bolehLihatNama(this._team);
     const nama = member.full_name || nick || '—';
     const tone = STATUS_TONE[member.status] || 'var(--text-muted)';
     const pid = member.player_id || '';
