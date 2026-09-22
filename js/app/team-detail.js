@@ -857,7 +857,7 @@ const styles = css`
      Kotak 40 piksel tidak cukup untuk memutuskan apa pun tentang sebuah foto,
      jadi satu-satunya gunanya adalah menjadi jalan membukanya utuh — dan itu
      harus terlihat sebagai sesuatu yang bisa ditekan, bukan ditebak.
-     Ditulis sebagai `button.logo-thumb` supaya hanya mengenai yang memang
+     Ditulis sebagai 'button.logo-thumb' supaya hanya mengenai yang memang
      tombol; kotak yang masih memuat atau gagal tetap <span> yang diam. */
   button.logo-thumb {
     padding: 0;
