@@ -1032,7 +1032,10 @@ export class TeamTable extends BaseElement {
                          stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
                    <circle cx="8" cy="8.6" r="2.4" stroke="currentColor" stroke-width="1.4" />
                  </svg>
-                 Unggah foto
+                 ${/* "Foto", bukan "Unggah foto": layar tujuannya kini juga
+                      tempat MELIHAT foto yang sudah masuk. Label yang hanya
+                      menjanjikan unggahan menyembunyikan separuh gunanya. */ ''}
+                 Foto tim
                </button>`
             : ''
         }

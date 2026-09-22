@@ -23,7 +23,7 @@ import {
 import { PICKER_TYPES, uploadTeamFile } from '../data/upload.js';
 import { catatKunjungan } from '../data/kunjungan.js';
 import {
-  adalahAdmin, adalahRelawan, adalahTim, ambilIdCard, ambilKodeTim, bolehLihatIdCard,
+  adalahAdmin, adalahRelawan, adalahTim, ambilBerkas, ambilIdCard, ambilKodeTim, bolehLihatIdCard,
   bolehLihatNama,
   ambilJejak, bolehHapusTim, bolehSuntingTim, bolehUnggahTim, buatKodeTim, hapusTim,
   JENIS_KODE, namaJenis, onAuth, sesiSekarang, simpanRoster, UMUR_KODE,
@@ -852,6 +852,29 @@ const styles = css`
   .logo-thumb svg {
     width: 20px;
     height: 20px;
+  }
+  /* Pratinjau foto yang sudah tersimpan: sebuah TOMBOL, bukan gambar polos.
+     Kotak 40 piksel tidak cukup untuk memutuskan apa pun tentang sebuah foto,
+     jadi satu-satunya gunanya adalah menjadi jalan membukanya utuh — dan itu
+     harus terlihat sebagai sesuatu yang bisa ditekan, bukan ditebak.
+     Ditulis sebagai `button.logo-thumb` supaya hanya mengenai yang memang
+     tombol; kotak yang masih memuat atau gagal tetap <span> yang diam. */
+  button.logo-thumb {
+    padding: 0;
+    border: 1px solid var(--border-strong);
+    cursor: pointer;
+    transition: border-color var(--dur) var(--ease);
+  }
+  button.logo-thumb:hover,
+  button.logo-thumb:focus-visible {
+    border-color: var(--accent);
+  }
+  /* Di baris pemain kotaknya mendatar, mengikuti .pratinjau-baris di
+     sebelahnya — dua kotak berukuran beda di satu baris terbaca sebagai dua
+     hal yang tidak sejenis, padahal keduanya foto orang yang sama. */
+  .daftar-unggah .logo-thumb {
+    width: 52px;
+    height: 34px;
   }
   .logo-teks {
     font-size: var(--fs-sm);
@@ -2652,13 +2675,21 @@ export class TeamDetail extends BaseElement {
     // Nama tim yang sedang diketik. Dipisah dari _roster karena ia milik TIM,
     // bukan salah satu pemainnya.
     this._namaTim = null;
-    this._lihat = null; // { playerId, nama, dataUrl, memuat, galat }
+    // Penampil berkas privat ukuran penuh — ID card MAUPUN foto:
+    // { tanda, kind, kunci, nama, dataUrl, memuat, galat, kasar }.
+    // `tanda` = "<kind>:<kunci>", dan ia yang dipakai membandingkan jawaban
+    // yang telat dengan apa yang sedang terbuka: kunci saja tidak cukup, karena
+    // ID card dan foto seorang pemain sama-sama berkunci playerId.
+    this._lihat = null;
     this._mode = 'lihat'; // 'lihat' (verifikasi) | 'berkas' (logo & ID card) | 'foto'
     this._kodeTim = null; // { memuat } | { kode, sampai } | { galat } — khusus admin
     this._kodeMemuat = false; // permintaan keadaan kode sedang berjalan
     this._pilihJenis = false; // dua pilihan jenis sedang ditampilkan
     this._kodeSibuk = false; // tombol "Buat kode" sedang bekerja
     this._idcard = {}; // cache pratinjau per playerId
+    // Cache pratinjau FOTO. Kuncinya teamId untuk foto bersama, playerId untuk
+    // foto pemain — kunci yang sama persis dipakai GAS di bacaBerkas().
+    this._foto = {};
     // Pratinjau LOKAL berkas yang baru dipilih, sebelum/selagi dikirim.
     // Dikunci per sasaran (teamId untuk logo & foto tim, playerId untuk sisanya)
     // supaya tiap baris menampilkan gambarnya sendiri.
@@ -2800,7 +2831,7 @@ export class TeamDetail extends BaseElement {
          justru elemen di LUAR header, dan CSS tidak bisa memilih ke atas. */
       team.logo_url ? ' ada-logo' : ''
     }"
-               aria-label="${unggah ? 'Unggah berkas' : foto ? 'Unggah foto' : 'Detail'} tim ${esc(team.team_name)}"
+               aria-label="${unggah ? 'Unggah berkas' : foto ? 'Foto' : 'Detail'} tim ${esc(team.team_name)}"
                style="--tone:${game.color}">
         <header>
           ${/* Crest PALING KIRI — kepala halaman dipimpin identitas tim, bukan
@@ -2877,7 +2908,7 @@ export class TeamDetail extends BaseElement {
                 : `<button class="ubah" type="button" data-act="mulai-sunting">
                      ${ICON_SUNTING}<span>Ubah data</span>
                    </button>`
-              : `<span class="mode-tag">${unggah ? 'Unggah berkas' : foto ? 'Unggah foto' : 'Verifikasi'}</span>`
+              : `<span class="mode-tag">${unggah ? 'Unggah berkas' : foto ? 'Foto' : 'Verifikasi'}</span>`
           }
           ${
             /* Jalan masuk ke layar unggah, dulu HANYA ada di menu ⋮ daftar tim.
@@ -2904,9 +2935,14 @@ export class TeamDetail extends BaseElement {
                 }${
                   foto || !bolehLayarFoto
                     ? ''
-                    : `<button class="aksi-layar" type="button" data-act="ke-foto"
-                               title="Unggah foto tim &amp; pemain" aria-label="Unggah foto tim dan pemain">
-                         ${IKON_FOTO}<span>Unggah foto</span>
+                    : /* Label "Foto", bukan lagi "Unggah foto": layar ini kini
+                         juga tempat MELIHAT foto yang sudah masuk, dan tombol
+                         yang hanya menjanjikan unggahan membuat orang yang
+                         mencari fotonya tidak pernah menekannya. */
+                      `<button class="aksi-layar" type="button" data-act="ke-foto"
+                               title="Lihat &amp; unggah foto tim dan pemain"
+                               aria-label="Lihat dan unggah foto tim dan pemain">
+                         ${IKON_FOTO}<span>Foto</span>
                        </button>`
                 }${
                   unggah || foto
@@ -3027,7 +3063,7 @@ export class TeamDetail extends BaseElement {
         </div>
 
         ${this._kotakHapus()}
-        ${this._lihat ? this._penampilIdCard() : ''}
+        ${this._lihat ? this._penampilBerkas() : ''}
       </section>`;
 
     this._rawatCrest(crestLama);
@@ -3035,6 +3071,10 @@ export class TeamDetail extends BaseElement {
     // Pratinjau ID card baru diminta setelah markup ada, dan hanya di mode
     // lihat: mode unggah tidak menampilkan gambarnya sama sekali.
     if (!unggah && !foto && bolehIdCard) this._muatPratinjau(members);
+    // Pratinjau foto hanya di layar foto — di sanalah satu-satunya tempat ia
+    // digambar, dan memintanya di layar lain berarti menarik berkas yang tidak
+    // akan pernah terlihat.
+    if (foto && bolehIdCard) this._muatFoto(team, members);
   }
 
   /**
@@ -3290,15 +3330,21 @@ export class TeamDetail extends BaseElement {
           }
 
           <div class="logo-mini ${esc(this._statusPilihan(kunciFotoTim))}">
-            <span class="logo-thumb">
-              ${
-                this._pilihan[kunciFotoTim]
-                  ? `<img src="${esc(this._pilihan[kunciFotoTim].url)}" alt="Pratinjau foto bersama" />`
-                  : team.has_foto_tim
-                    ? IKON_FOTO
-                    : esc(initials(team.team_name))
-              }
-            </span>
+            ${
+              /* Yang baru DIPILIH menang atas yang sudah tersimpan: gambar yang
+                 dilihat orang harus yang akan dikirimnya, bukan yang akan
+                 ditimpanya. */
+              this._pilihan[kunciFotoTim]
+                ? `<span class="logo-thumb">
+                     <img src="${esc(this._pilihan[kunciFotoTim].url)}" alt="Pratinjau foto bersama" />
+                   </span>`
+                : this._kotakFoto(
+                    team.team_id,
+                    `Foto bersama ${team.team_name}`,
+                    team.has_foto_tim,
+                    initials(team.team_name)
+                  )
+            }
             <span class="logo-teks">
               Foto bersama <em class="opsional">opsional</em>
               <small>${this._ketPilihan(kunciFotoTim, team.has_foto_tim)}</small>
@@ -3333,6 +3379,12 @@ export class TeamDetail extends BaseElement {
                 ${esc(m.full_name || '—')}
                 ${m.game_nick ? `<small>${esc(m.game_nick)}</small>` : ''}
               </span>
+              ${
+                /* Foto yang sudah masuk tampil di barisnya sendiri, bukan hanya
+                   sebagai kata "Sudah". Panitia memeriksa FOTO — kata itu tidak
+                   memberitahu apakah yang terkirim benar orangnya. */
+                this._kotakFoto(m.player_id, `Foto ${m.full_name || m.game_nick || 'pemain'}`, m.has_foto)
+              }
               ${this._kotakPilihan(this._kunciPilihan('foto', m.player_id))}
               ${this._tandaBaris(this._kunciPilihan('foto', m.player_id), m.has_foto)}
               <button class="unggah kecil" type="button" data-act="unggah-foto"
@@ -3955,13 +4007,27 @@ export class TeamDetail extends BaseElement {
     }
   }
 
-  _penampilIdCard() {
+  /**
+   * Penampil satu berkas privat ukuran penuh. Dipakai ID card DAN foto —
+   * keduanya berkas privat yang hanya keluar lewat rute ber-token yang sama,
+   * dan keduanya butuh hal yang sama persis dari layar ini: satu gambar,
+   * sebesar mungkin, tanpa apa pun di sekitarnya.
+   *
+   * Kelasnya tetap `.lihat-idcard` — namanya tertinggal dari pemakai
+   * pertamanya, tapi seluruh CSS-nya (rantai tinggi yang harus utuh, lihat
+   * catatan di bagian CSS) berlaku sama untuk foto.
+   */
+  _penampilBerkas() {
     const v = this._lihat;
+    const foto = v.kind === 'foto';
+    const jenis = foto ? 'Foto' : 'ID card';
     return `
-      <div class="lihat-idcard" role="dialog" aria-label="ID card ${esc(v.nama)}">
+      <div class="lihat-idcard" role="dialog" aria-label="${jenis} ${esc(v.nama)}">
         <header>
-          <span class="judul">${esc(v.nama)}<small>ID Card — hanya untuk verifikasi</small></span>
-          <button class="close" type="button" data-act="tutup-idcard" aria-label="Tutup ID card">×</button>
+          <span class="judul">${esc(v.nama)}<small>${
+            foto ? 'Foto — hanya untuk keperluan panitia' : 'ID Card — hanya untuk verifikasi'
+          }</small></span>
+          <button class="close" type="button" data-act="tutup-idcard" aria-label="Tutup ${jenis}">×</button>
         </header>
         <div class="isi">
           ${
@@ -3969,7 +4035,7 @@ export class TeamDetail extends BaseElement {
               ? '<span class="info">Mengambil berkas…</span>'
               : v.galat
                 ? `<span class="info">${esc(v.galat)}</span>`
-                : `<img src="${esc(v.dataUrl)}" alt="ID card ${esc(v.nama)}" />`
+                : `<img src="${esc(v.dataUrl)}" alt="${jenis} ${esc(v.nama)}" />`
           }
           ${
             /* Dikatakan apa adanya selagi yang tampil masih versi kecil.
@@ -4146,6 +4212,73 @@ export class TeamDetail extends BaseElement {
             if (this._team?.members?.some((x) => x.player_id === m.player_id)) this.requestRender();
           });
       });
+  }
+
+  /**
+   * Ambil pratinjau SELURUH foto tim ini: foto bersama dan foto tiap pemain.
+   *
+   * Thumbnail, dengan alasan yang sama seperti ID card — hanya jauh lebih
+   * menentukan di sini. Foto sengaja dipertahankan seaslinya saat diunggah
+   * (lihat siapkanFoto di js/data/upload.js), jadi satu berkas bisa beberapa
+   * MB dan satu tim bisa sembilan berkas sekaligus; membuka layar ini dengan
+   * versi penuh berarti menarik puluhan MB untuk gambar sebesar 40 piksel.
+   * Versi penuhnya diambil hanya saat satu foto benar-benar dibuka.
+   *
+   * Di-cache per kunci supaya render ulang — dan di layar ini render dipanggil
+   * untuk tiap berkas yang dipilih — tidak menembak ulang jaringan.
+   */
+  _muatFoto(team, members) {
+    this._foto = this._foto || {};
+    const sasaran = [];
+    // teamId di foto bersama, playerId di foto pemain. Keduanya dikirim
+    // terpisah: GAS memakai playerId lebih dulu dan jatuh ke teamId.
+    if (team.has_foto_tim) sasaran.push({ kunci: team.team_id, teamId: team.team_id, playerId: '' });
+    for (const m of members) {
+      if (m.has_foto && m.player_id) sasaran.push({ kunci: m.player_id, teamId: '', playerId: m.player_id });
+    }
+
+    sasaran
+      .filter((s) => !this._foto[s.kunci])
+      .forEach((s) => {
+        this._foto[s.kunci] = { memuat: true };
+        ambilBerkas({ kind: 'foto', teamId: s.teamId, playerId: s.playerId, thumb: true })
+          .then((dataUrl) => {
+            this._foto[s.kunci] = { dataUrl };
+          })
+          .catch((error) => {
+            this._foto[s.kunci] = { galat: error.message || 'Gagal memuat' };
+          })
+          .finally(() => {
+            // Panelnya bisa saja sudah berpindah tim selagi permintaan berjalan.
+            if (this._team?.team_id === team.team_id) this.requestRender();
+          });
+      });
+  }
+
+  /**
+   * Kotak satu foto yang SUDAH tersimpan, sebesar pratinjau.
+   *
+   * Tiga keadaan yang harus terbaca beda:
+   *   belum ada foto -> teks pengganti (inisial tim / tanda), bukan tombol
+   *   pratinjau masih dalam perjalanan atau gagal -> ikon diam, bukan tombol
+   *   sudah ada      -> tombol; menekannya membuka fotonya utuh
+   *
+   * Yang gagal dimuat sengaja TIDAK dijadikan tombol: menawarkan tekanan yang
+   * pasti tidak membuka apa pun lebih buruk daripada kotak yang diam, dan
+   * alasannya tetap terbaca lewat title.
+   */
+  _kotakFoto(kunci, nama, ada, ganti = '') {
+    if (!ada) return `<span class="logo-thumb">${esc(ganti)}</span>`;
+    const item = this._foto?.[kunci];
+    if (item?.dataUrl) {
+      return `
+        <button class="logo-thumb bisa-lihat" type="button" data-act="lihat-foto"
+                data-kunci="${esc(kunci)}" data-nama="${esc(nama)}"
+                title="Lihat ${esc(nama)} ukuran penuh" aria-label="Lihat ${esc(nama)} ukuran penuh">
+          <img src="${esc(item.dataUrl)}" alt="${esc(nama)}" />
+        </button>`;
+    }
+    return `<span class="logo-thumb" title="${esc(item?.galat || 'Memuat pratinjau…')}">${IKON_FOTO}</span>`;
   }
 
   /**
@@ -4523,6 +4656,7 @@ export class TeamDetail extends BaseElement {
           this._sunting = false;
           this._lihat = null;
           this._idcard = {};
+          this._foto = {};
           this._kodeTim = null;
           this._kodeMemuat = false;
           this._pilihJenis = false;
@@ -4572,6 +4706,13 @@ export class TeamDetail extends BaseElement {
         // menawarkan tombol yang pasti dijawab "Sesi berakhir" oleh GAS.
         if (this._hapus && !this._bolehUbah()) this._hapus = null;
         if (this._lihat && !sesiSekarang()) this._lihat = null;
+        // Keluar juga membuang gambar yang sudah terlanjur diunduh. Keduanya
+        // berkas privat — ID card dan foto orang — dan tidak ada alasan ia
+        // menetap di memori setelah sesi yang berhak melihatnya berakhir.
+        if (!sesiSekarang()) {
+          this._idcard = {};
+          this._foto = {};
+        }
         // Keluar atau berganti peran mencabut alat susunan; pilihannya ikut
         // dibuang supaya masuk kembali tidak menghidupkan pilihan orang lain.
         if (!this._bolehPilih()) this._terpilih.clear();
@@ -4660,6 +4801,17 @@ export class TeamDetail extends BaseElement {
         // juga, di satu tempat yang sama-sama berlaku untuk keduanya.
         if (!this._bolehPerbesar()) return;
         this._bukaIdCard(lihat.dataset.player);
+        return;
+      }
+
+      // Foto TIDAK ikut aturan _bolehPerbesar(). Batas itu ada karena ID card
+      // sudah tergambar UTUH di dalam kartu pemain, sehingga memperbesarnya di
+      // layar sempit tidak menambah apa pun. Foto tidak begitu: yang tampil di
+      // barisnya cuma kotak 52 piksel, dan menutup jalan membukanya di ponsel
+      // berarti foto itu tidak pernah benar-benar bisa dilihat di sana.
+      const lihatFoto = event.target.closest('[data-act="lihat-foto"]');
+      if (lihatFoto) {
+        this._bukaFoto(lihatFoto.dataset.kunci, lihatFoto.dataset.nama);
         return;
       }
 
@@ -4849,40 +5001,79 @@ export class TeamDetail extends BaseElement {
   async _bukaIdCard(playerId) {
     const pemain = (this._team?.members || []).find((m) => m.player_id === playerId);
     if (!pemain) return;
-
-    const pratinjau = this._idcard?.[playerId]?.dataUrl || null;
-    this._lihat = {
+    return this._bukaBerkas({
+      kind: 'idcard',
+      kunci: playerId,
       playerId,
       nama: pemain.full_name || pemain.game_nick || '—',
+      pratinjau: this._idcard?.[playerId]?.dataUrl || null,
+    });
+  }
+
+  /**
+   * Tampilkan satu FOTO ukuran penuh: foto bersama (kunci = teamId) atau foto
+   * seorang pemain (kunci = playerId).
+   *
+   * Dibedakan di sini, bukan di GAS: di sana keduanya memang satu kunci yang
+   * sama bentuknya, dan yang tahu mana teamId hanyalah layar yang menggambarnya.
+   */
+  async _bukaFoto(kunci, nama) {
+    if (!kunci) return;
+    const milikTim = kunci === this._team?.team_id;
+    return this._bukaBerkas({
+      kind: 'foto',
+      kunci,
+      teamId: milikTim ? kunci : '',
+      playerId: milikTim ? '' : kunci,
+      nama: nama || 'Foto',
+      pratinjau: this._foto?.[kunci]?.dataUrl || null,
+    });
+  }
+
+  /**
+   * Isi bersama kedua pembuka di atas: tampilkan pratinjaunya SEKARANG, lalu
+   * tukar dengan versi penuh begitu tiba.
+   *
+   * Pembandingnya `tanda` ("<kind>:<kunci>"), bukan kunci saja: ID card dan
+   * foto seorang pemain berkunci sama, dan membandingkan kunci saja membuat
+   * jawaban ID card yang telat mendarat di penampil foto yang baru dibuka.
+   */
+  async _bukaBerkas({ kind, kunci, nama, playerId = '', teamId = '', pratinjau = null }) {
+    const tanda = `${kind}:${kunci}`;
+    this._lihat = {
+      tanda,
+      kind,
+      kunci,
+      nama,
       dataUrl: pratinjau,
       // "Mengambil berkas…" hanya untuk yang benar-benar belum punya apa pun
       // untuk ditampilkan — misalnya pratinjaunya sendiri masih dalam
       // perjalanan, atau gagal dimuat tadi.
       memuat: !pratinjau,
       // Penanda bahwa yang tampil masih versi kecil. Dipakai penampil untuk
-      // mengatakan apa adanya, supaya tidak ada yang menyimpulkan ID card-nya
+      // mengatakan apa adanya, supaya tidak ada yang menyimpulkan berkasnya
       // memang buram lalu menolaknya.
       kasar: Boolean(pratinjau),
     };
     this.render();
 
     try {
-      const dataUrl = await ambilIdCard(playerId);
-      // Pengguna bisa saja sudah menutup penampilnya atau membuka pemain lain.
-      if (this._lihat?.playerId !== playerId) return;
+      const dataUrl = await ambilBerkas({ kind, playerId, teamId });
+      // Pengguna bisa saja sudah menutup penampilnya atau membuka berkas lain.
+      if (this._lihat?.tanda !== tanda) return;
       // Didekode lebih dulu, baru ditukar. Menukar src mentah-mentah membuat
       // gambar yang sudah terlihat berkedip kosong sesaat — persis kebalikan
       // dari yang diusahakan di sini.
       await this._siapkanGambar(dataUrl);
-      if (this._lihat?.playerId !== playerId) return;
+      if (this._lihat?.tanda !== tanda) return;
       this._lihat = { ...this._lihat, memuat: false, kasar: false, dataUrl };
     } catch (error) {
-      if (this._lihat?.playerId !== playerId) return;
+      if (this._lihat?.tanda !== tanda) return;
       // Pratinjau yang SUDAH tampil tidak boleh diganti layar galat: yang gagal
-      // cuma upaya menajamkan, dan orangnya masih bisa melihat kartunya.
+      // cuma upaya menajamkan, dan orangnya masih bisa melihat gambarnya.
       this._lihat = pratinjau
         ? { ...this._lihat, memuat: false }
-        : { ...this._lihat, memuat: false, galat: error.message || 'Gagal mengambil ID card.' };
+        : { ...this._lihat, memuat: false, galat: error.message || 'Gagal mengambil berkas.' };
     }
     this.render();
   }
@@ -5385,6 +5576,11 @@ export class TeamDetail extends BaseElement {
       return;
     }
     if (item.kind === 'foto') {
+      // Pratinjau lamanya menunjuk berkas yang BARU SAJA ditimpa. Dibuang di
+      // sini, bukan ditimpa dengan gambar yang baru dipilih: yang dipakai
+      // sebagai pratinjau adalah thumbnail Drive dari berkas yang tersimpan,
+      // dan render berikutnya akan memintanya lagi sendiri.
+      if (this._foto) delete this._foto[item.playerId || team.team_id];
       if (item.playerId) applyPlayerPatch(item.playerId, { has_foto: true });
       else applyUpload(team.team_id, { has_foto_tim: true });
       return;
